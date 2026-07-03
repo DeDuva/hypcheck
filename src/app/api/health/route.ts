@@ -59,6 +59,7 @@ export async function GET() {
     engine: {
       mode: engine.hasKey ? "live" : "simulated",
       model: engine.model,
+      extractModel: engine.extractModel,
       hasKey: engine.hasKey,
     },
     logLevel: process.env.HYPCHECK_LOG_LEVEL ?? (process.env.NODE_ENV === "production" ? "info" : "debug"),

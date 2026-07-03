@@ -4,17 +4,21 @@ import { DEPTH_LABELS } from "../types";
 import { Logger, logger as rootLogger } from "../logger";
 
 const MODEL = process.env.HYPCHECK_MODEL || "claude-opus-4-8";
+// The extraction pass only reformats the report into JSON — a fast model does
+// it well and shaves seconds off the run, which matters under a tight
+// (e.g. Vercel Hobby 60s) function budget.
+const EXTRACT_MODEL = process.env.HYPCHECK_EXTRACT_MODEL || "claude-haiku-4-5";
 
-const DEPTH_SEARCHES: Record<Depth, number> = { brief: 4, standard: 8, deep: 16 };
-const DEPTH_TOKENS: Record<Depth, number> = { brief: 8000, standard: 16000, deep: 32000 };
+const DEPTH_SEARCHES: Record<Depth, number> = { brief: 3, standard: 5, deep: 8 };
+const DEPTH_TOKENS: Record<Depth, number> = { brief: 6000, standard: 12000, deep: 24000 };
 
 export function liveEngineAvailable(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
 /** Non-secret engine config, for the health endpoint and logs. */
-export function engineInfo(): { model: string; hasKey: boolean } {
-  return { model: MODEL, hasKey: liveEngineAvailable() };
+export function engineInfo(): { model: string; extractModel: string; hasKey: boolean } {
+  return { model: MODEL, extractModel: EXTRACT_MODEL, hasKey: liveEngineAvailable() };
 }
 
 export type LiveTelemetry = Pick<RunTelemetry, "inputTokens" | "outputTokens" | "searches">;
@@ -168,7 +172,7 @@ export async function liveRun(
   // Second pass: distill the research report into the structured run result.
   const extractStart = Date.now();
   const structured = await anthropic.messages.create({
-    model: MODEL,
+    model: EXTRACT_MODEL,
     max_tokens: 8000,
     output_config: { format: { type: "json_schema", schema: RESULT_SCHEMA as unknown as Record<string, unknown> } },
     messages: [
@@ -187,6 +191,7 @@ export async function liveRun(
   });
   log.info("engine.extract.done", {
     ms: Date.now() - extractStart,
+    model: EXTRACT_MODEL,
     inputTokens: structured.usage.input_tokens,
     outputTokens: structured.usage.output_tokens,
     stopReason: structured.stop_reason,

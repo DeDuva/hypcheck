@@ -271,37 +271,63 @@ export async function recordRun(
   const db = await getDb();
   const runId = newId();
   const at = runAt.toISOString();
-  await db.execute({
-    sql: `INSERT INTO runs (id, hypcheck_id, hypothesis_version_id, hypothesis_version, run_at, mode,
-            pmf_score, confidence, exec_summary, report_md, metric_scores,
-            duration_ms, input_tokens, output_tokens, searches)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      runId,
-      hypcheckId,
-      version.id,
-      version.version,
-      at,
-      mode,
-      Math.round(result.pmfScore * 10) / 10,
-      result.confidence,
-      result.execSummary,
-      result.reportMd,
-      JSON.stringify(result.metricScores),
-      telemetry.durationMs ?? null,
-      telemetry.inputTokens ?? null,
-      telemetry.outputTokens ?? null,
-      telemetry.searches ?? null,
-    ],
-  });
-  for (const ins of result.insights) {
-    await db.execute({
+  const pmfScore = Math.round(result.pmfScore * 10) / 10;
+  const telem: RunTelemetry = {
+    durationMs: telemetry.durationMs ?? null,
+    inputTokens: telemetry.inputTokens ?? null,
+    outputTokens: telemetry.outputTokens ?? null,
+    searches: telemetry.searches ?? null,
+  };
+
+  // Single batched write (run + all insights) rather than N+1 sequential
+  // round-trips — matters on a high-latency DB. Return is built in memory to
+  // avoid a follow-up read.
+  const statements = [
+    {
+      sql: `INSERT INTO runs (id, hypcheck_id, hypothesis_version_id, hypothesis_version, run_at, mode,
+              pmf_score, confidence, exec_summary, report_md, metric_scores,
+              duration_ms, input_tokens, output_tokens, searches)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        runId,
+        hypcheckId,
+        version.id,
+        version.version,
+        at,
+        mode,
+        pmfScore,
+        result.confidence,
+        result.execSummary,
+        result.reportMd,
+        JSON.stringify(result.metricScores),
+        telem.durationMs,
+        telem.inputTokens,
+        telem.outputTokens,
+        telem.searches,
+      ],
+    },
+    ...result.insights.map((ins) => ({
       sql: `INSERT INTO insights (id, run_id, hypcheck_id, title, body, direction, proposed_revision, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?)`,
       args: [newId(), runId, hypcheckId, ins.title, ins.body, ins.direction, ins.proposedRevision, at],
-    });
-  }
-  return (await getRun(runId))!;
+    })),
+  ];
+  await db.batch(statements, "write");
+
+  return {
+    id: runId,
+    hypcheckId,
+    hypothesisVersionId: version.id,
+    hypothesisVersion: version.version,
+    runAt: at,
+    mode,
+    pmfScore,
+    confidence: result.confidence,
+    execSummary: result.execSummary,
+    reportMd: result.reportMd,
+    metricScores: result.metricScores,
+    telemetry: telem,
+  };
 }
 
 // ---------------------------------------------------------------------------

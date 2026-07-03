@@ -10,9 +10,13 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
   return log.span(
     "engine.executeRun",
     async () => {
-      const version = await currentVersion(hypcheck.id);
-      const metrics = await listMetrics(hypcheck.id);
-      const prior = await latestRun(hypcheck.id);
+      // Independent reads run in parallel — on a high-latency (cross-region)
+      // DB, serializing these alone can burn double-digit seconds.
+      const [version, metrics, prior] = await Promise.all([
+        currentVersion(hypcheck.id),
+        listMetrics(hypcheck.id),
+        latestRun(hypcheck.id),
+      ]);
       const start = Date.now();
 
       let run: Run;
