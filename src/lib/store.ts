@@ -384,6 +384,42 @@ export async function countPendingProposals(hypcheckId: string): Promise<number>
 // Observability
 // ---------------------------------------------------------------------------
 
+/**
+ * Last run attempt, persisted so failures are visible on /api/health without
+ * reading platform logs. A "running" record that never advances to ok/error
+ * means the function was killed mid-run (hard timeout).
+ */
+export interface RunAttempt {
+  status: "running" | "ok" | "error";
+  hypcheckId: string;
+  hypcheckName: string;
+  model: string;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  mode?: string;
+  score?: number;
+  fellBack?: boolean;
+  error?: Record<string, unknown>;
+}
+
+export async function setLastRunAttempt(a: RunAttempt): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO app_meta (key, value, updated_at) VALUES ('last_run_attempt', ?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    args: [JSON.stringify(a), new Date().toISOString()],
+  });
+}
+
+export async function getLastRunAttempt(): Promise<(RunAttempt & { updatedAt: string }) | null> {
+  const db = await getDb();
+  const res = await db.execute("SELECT value, updated_at FROM app_meta WHERE key = 'last_run_attempt'");
+  const row = res.rows[0] as Row | undefined;
+  if (!row) return null;
+  return { ...(JSON.parse(row.value as string) as RunAttempt), updatedAt: row.updated_at as string };
+}
+
 export interface DbStats {
   hypchecks: number;
   runs: number;

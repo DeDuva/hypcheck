@@ -1,12 +1,43 @@
 import type { Hypcheck, RefineResult, Run } from "../types";
-import { currentVersion, latestRun, listMetrics, recordRun, setNextRun } from "../store";
+import { currentVersion, latestRun, listMetrics, recordRun, setLastRunAttempt, setNextRun, type RunAttempt } from "../store";
 import { engineInfo, liveEngineAvailable, liveRefine, liveRun } from "./claude";
 import { simulateRun } from "./simulate";
 import { Logger, logger, newRequestId, serializeError } from "../logger";
 
+/** Persist the run-attempt marker; never let diagnostics break a run. */
+async function safeSetAttempt(log: Logger, a: RunAttempt): Promise<void> {
+  try {
+    await setLastRunAttempt(a);
+  } catch (err) {
+    log.warn("engine.attempt.write_failed", { err: serializeError(err) });
+  }
+}
+
 /** Execute a research run for a hypcheck and persist the result. */
 export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger): Promise<Run> {
   const log = parentLog.child({ runId: newRequestId(), hypcheckId: hypcheck.id });
+  const model = engineInfo().model;
+  const startedAt = new Date().toISOString();
+  // Commit a "running" marker before the long work so a hard timeout (function
+  // killed mid-run) is still visible on /api/health as a stuck "running" attempt.
+  await safeSetAttempt(log, { status: "running", hypcheckId: hypcheck.id, hypcheckName: hypcheck.name, model, startedAt });
+
+  try {
+    return await runInner();
+  } catch (err) {
+    await safeSetAttempt(log, {
+      status: "error",
+      hypcheckId: hypcheck.id,
+      hypcheckName: hypcheck.name,
+      model,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      error: serializeError(err),
+    });
+    throw err;
+  }
+
+  async function runInner(): Promise<Run> {
   return log.span(
     "engine.executeRun",
     async () => {
@@ -57,10 +88,23 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
         fellBack,
         ms: Date.now() - start,
       });
+      await safeSetAttempt(log, {
+        status: "ok",
+        hypcheckId: hypcheck.id,
+        hypcheckName: hypcheck.name,
+        model,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - start,
+        mode: run.mode,
+        score: run.pmfScore,
+        fellBack,
+      });
       return run;
     },
     { hypcheckName: hypcheck.name, cadence: hypcheck.cadence, depth: hypcheck.depth, live: liveEngineAvailable() }
   );
+  }
 }
 
 // ---------------------------------------------------------------------------
