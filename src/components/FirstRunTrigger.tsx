@@ -1,62 +1,47 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { runNowAction } from "@/lib/actions";
-import { pollRun } from "@/lib/runStatus";
+import { RunProgress } from "./RunProgress";
+import type { RunOutcome } from "@/lib/runStatus";
 
 /** Auto-triggers the first research run once the user lands on a brand-new hypcheck. */
 export function FirstRunTrigger({ hypcheckId, live }: { hypcheckId: string; live: boolean }) {
-  const [phase, setPhase] = useState<"running" | "done" | "error" | "timeout">("running");
+  const [since, setSince] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const fired = useRef(false);
-  const router = useRouter();
 
   useEffect(() => {
     if (fired.current) return;
     fired.current = true;
-    (async () => {
-      const since = Date.now();
-      try {
-        await runNowAction(hypcheckId); // returns immediately; research runs in the background
-      } catch {
-        setPhase("error");
-        return;
-      }
-      const outcome = await pollRun(hypcheckId, { since });
-      if (outcome === "ok") {
-        setPhase("done");
-        router.refresh();
-      } else if (outcome === "error") {
-        setPhase("error");
-      } else {
-        setPhase("timeout");
-      }
-    })();
-  }, [hypcheckId, router]);
+    const start = Date.now();
+    setSince(start);
+    runNowAction(hypcheckId).catch(() => {
+      setError("The first run couldn’t start — use “Run now” above to try again.");
+    });
+  }, [hypcheckId]);
+
+  function onFinished(outcome: RunOutcome) {
+    if (outcome === "error") setError("The first run hit an error — use “Run now” above to try again.");
+    // "ok" auto-refreshes; the chart appears with the new run.
+  }
 
   return (
-    <div className="flex flex-col items-center gap-2 py-12 text-center">
-      {phase === "error" ? (
-        <p className="text-[13px] text-ink-soft">
-          The first run couldn&apos;t complete — use &ldquo;Run now&rdquo; above to try again.
-        </p>
-      ) : phase === "timeout" ? (
-        <p className="text-[13px] text-ink-soft">
-          Still researching — it&apos;s taking a while. The first run will appear here once it finishes; refresh in a minute.
-        </p>
+    <div className="flex flex-col items-center gap-3 py-12 text-center">
+      {error ? (
+        <p className="text-[13px] text-ink-soft">{error}</p>
       ) : (
         <>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="animate-spin text-iris" aria-hidden>
-            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-            <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
           <p className="text-[13px] text-ink-soft">
-            {phase === "done"
-              ? "First run complete — refreshing…"
-              : live
-                ? "Running your first live research check in the background — this can take a minute or two…"
-                : "Running your first check…"}
+            {live
+              ? "Running your first live research check. This takes a few minutes and updates automatically — no need to refresh."
+              : "Running your first check…"}
           </p>
+          {since !== null && (
+            <div className="w-full max-w-md">
+              <RunProgress hypcheckId={hypcheckId} since={since} onFinished={onFinished} />
+            </div>
+          )}
         </>
       )}
     </div>
