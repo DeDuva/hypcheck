@@ -1,5 +1,5 @@
-import type { Depth, InsightDirection, MetricScore } from "../types";
-import { DEPTH_LABELS, scoreBand } from "../types";
+import type { Depth, IndustryAnalysis, InsightDirection, MetricScore } from "../types";
+import { DEPTH_LABELS, STANCE_BLURB, STANCE_LABELS, scoreBand } from "../types";
 
 export interface ReportInput {
   name: string;
@@ -11,6 +11,7 @@ export interface ReportInput {
   pmfScore: number;
   confidence: number;
   execSummary: string;
+  industryAnalysis?: IndustryAnalysis | null;
   metricScores: MetricScore[];
   watchlist: string[];
   watchlistNotes: Record<string, string>;
@@ -24,6 +25,38 @@ const DIRECTION_LABEL: Record<InsightDirection, string> = {
   challenging: "Challenging",
   watch: "Watch",
 };
+
+/** Renders the analyst-style industry analysis as markdown lines. */
+export function renderIndustryAnalysis(ia: IndustryAnalysis): string[] {
+  const lines: string[] = [];
+  lines.push(`## Industry Analysis`);
+  lines.push("");
+  lines.push(`**Analyst's call: ${STANCE_LABELS[ia.stance]}** · ${ia.conviction} conviction`);
+  lines.push("");
+  lines.push(`*${STANCE_BLURB[ia.stance]}*`);
+  lines.push("");
+  lines.push(ia.headline);
+  lines.push("");
+  lines.push(`### Landscape`);
+  lines.push("");
+  lines.push(ia.landscape);
+  lines.push("");
+  lines.push(`### Competitive dynamics`);
+  lines.push("");
+  lines.push(ia.competitiveDynamics);
+  lines.push("");
+  if (ia.catalysts.length) {
+    lines.push(`### Catalysts & signals to watch`);
+    lines.push("");
+    for (const c of ia.catalysts) lines.push(`- ${c}`);
+    lines.push("");
+  }
+  lines.push(`### Implications for the hypothesis`);
+  lines.push("");
+  lines.push(ia.implications);
+  lines.push("");
+  return lines;
+}
 
 export function buildReportMd(r: ReportInput): string {
   const band = scoreBand(r.pmfScore);
@@ -46,6 +79,9 @@ export function buildReportMd(r: ReportInput): string {
   lines.push("");
   lines.push(r.execSummary);
   lines.push("");
+  if (r.industryAnalysis) {
+    lines.push(...renderIndustryAnalysis(r.industryAnalysis));
+  }
   lines.push(`## Signal analysis`);
   lines.push("");
   for (const m of r.metricScores) {

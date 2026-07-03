@@ -5,6 +5,37 @@ export type InsightDirection = "supporting" | "challenging" | "watch";
 export type InsightStatus = "new" | "accepted" | "dismissed";
 export type VersionSource = "initial" | "insight" | "manual" | "ai";
 
+// Analyst's call — the leadership-facing stance the industry analysis lands on.
+export type AnalystStance = "accelerate" | "advance" | "hold" | "reposition" | "retreat";
+export type Conviction = "low" | "moderate" | "high";
+
+export const STANCE_LABELS: Record<AnalystStance, string> = {
+  accelerate: "Accelerate",
+  advance: "Advance",
+  hold: "Hold",
+  reposition: "Reposition",
+  retreat: "Retreat",
+};
+
+export const STANCE_BLURB: Record<AnalystStance, string> = {
+  accelerate: "Strong tailwind and an open window — move faster than planned.",
+  advance: "Conditions favor the thesis — proceed and press the advantage.",
+  hold: "Mixed signal — maintain course and let the next cycles adjudicate.",
+  reposition: "Headwinds or a closing window — adjust the wedge before pressing on.",
+  retreat: "Structurally unfavorable — deprioritize or pivot away.",
+};
+
+/** An analyst-grade industry briefing attached to each run (max ~2 pages). */
+export interface IndustryAnalysis {
+  headline: string; // BLUF: the single most important industry takeaway, 1-2 sentences
+  stance: AnalystStance;
+  conviction: Conviction;
+  landscape: string; // market structure, lifecycle stage, momentum
+  competitiveDynamics: string; // moves by watchlist + adjacent entrants; whitespace
+  catalysts: string[]; // recent/upcoming events that move the market
+  implications: string; // the "so what" for this hypothesis
+}
+
 export interface Hypcheck {
   id: string;
   name: string;
@@ -60,6 +91,7 @@ export interface Run {
   execSummary: string;
   reportMd: string;
   metricScores: MetricScore[];
+  industryAnalysis: IndustryAnalysis | null; // null on runs recorded before this feature
   telemetry: RunTelemetry;
 }
 
@@ -81,6 +113,7 @@ export interface RunResult {
   execSummary: string;
   reportMd: string;
   metricScores: MetricScore[];
+  industryAnalysis: IndustryAnalysis;
   insights: Array<{
     title: string;
     body: string;

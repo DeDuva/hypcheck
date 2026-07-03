@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS runs (
   duration_ms REAL,
   input_tokens INTEGER,
   output_tokens INTEGER,
-  searches INTEGER
+  searches INTEGER,
+  industry_analysis TEXT
 );
 CREATE TABLE IF NOT EXISTS insights (
   id TEXT PRIMARY KEY,
@@ -73,6 +74,7 @@ const MIGRATIONS: Record<string, Record<string, string>> = {
     input_tokens: "INTEGER",
     output_tokens: "INTEGER",
     searches: "INTEGER",
+    industry_analysis: "TEXT",
   },
 };
 

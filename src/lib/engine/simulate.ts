@@ -1,5 +1,6 @@
 import type { Hypcheck, HypothesisVersion, Metric, RunResult } from "../types";
 import { buildReportMd } from "./report";
+import { synthIndustryAnalysis } from "../industry";
 
 // Deterministic PRNG so simulated runs are stable for a given hypcheck + date.
 function hashString(s: string): number {
@@ -157,6 +158,16 @@ export function simulateRun(
 
   const confidence = Math.round((0.55 + rand() * 0.25) * 100) / 100;
 
+  const industryAnalysis = synthIndustryAnalysis({
+    hypcheckName: hypcheck.name,
+    watchlist: hypcheck.watchlist,
+    score: pmfScore,
+    delta,
+    strongest: strongest?.name ?? null,
+    weakest: weakest?.name ?? null,
+    rand,
+  });
+
   const reportMd = buildReportMd({
     name: hypcheck.name,
     statement: version.statement,
@@ -167,6 +178,7 @@ export function simulateRun(
     pmfScore,
     confidence,
     execSummary,
+    industryAnalysis,
     metricScores,
     watchlist: hypcheck.watchlist,
     watchlistNotes,
@@ -183,5 +195,5 @@ export function simulateRun(
     ],
   });
 
-  return { pmfScore, confidence, execSummary, reportMd, metricScores, insights };
+  return { pmfScore, confidence, execSummary, reportMd, metricScores, industryAnalysis, insights };
 }
