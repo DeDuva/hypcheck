@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { runNowAction } from "@/lib/actions";
+import { pollRun } from "@/lib/runStatus";
 
 export function RunNowButton({ hypcheckId, live }: { hypcheckId: string; live: boolean }) {
   const [pending, startTransition] = useTransition();
@@ -12,19 +13,21 @@ export function RunNowButton({ hypcheckId, live }: { hypcheckId: string; live: b
   function run() {
     setError(null);
     startTransition(async () => {
+      const since = Date.now();
       try {
-        await runNowAction(hypcheckId);
-        router.refresh();
+        await runNowAction(hypcheckId); // returns immediately; research runs in the background
       } catch (err) {
-        // A rejected action must never bubble to the error boundary (that
-        // white-screens the app). Surface it inline instead. Server-action
-        // timeouts reject with a generic "unexpected response" message.
         const message = err instanceof Error ? err.message : String(err);
-        setError(
-          /unexpected response|Failed to fetch|network/i.test(message)
-            ? "The run didn’t finish — it may have timed out. Check the logs and try again."
-            : `Run failed: ${message}`
-        );
+        setError(`Couldn’t start the run: ${message}`);
+        return;
+      }
+      const outcome = await pollRun(hypcheckId, { since });
+      if (outcome === "ok") {
+        router.refresh();
+      } else if (outcome === "error") {
+        setError("The research run hit an error. See /api/health (lastAttempt) for details.");
+      } else {
+        setError("Still researching — this run is taking a while. It’ll appear once it finishes; refresh in a minute.");
       }
     });
   }
@@ -54,6 +57,11 @@ export function RunNowButton({ hypcheckId, live }: { hypcheckId: string; live: b
           </>
         )}
       </button>
+      {pending && live && (
+        <p className="max-w-[220px] text-right text-[11.5px] leading-snug text-ink-faint">
+          Researching in the background — this can take a minute or two.
+        </p>
+      )}
       {error && <p className="max-w-[220px] text-right text-[11.5px] leading-snug text-rose-600">{error}</p>}
     </div>
   );
