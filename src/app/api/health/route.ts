@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDbStats } from "@/lib/store";
+import { getDbStats, getLastRunAttempt, type RunAttempt } from "@/lib/store";
 import { engineInfo } from "@/lib/engine";
 import { logger, newRequestId, serializeError } from "@/lib/logger";
 
@@ -29,11 +29,20 @@ export async function GET() {
     searches: number | null;
   } | null = null;
 
+  let lastAttempt: (RunAttempt & { updatedAt: string; stale?: boolean }) | null = null;
+
   const start = Date.now();
   try {
     const stats = await getDbStats();
     db = { backend, ok: true, latencyMs: Date.now() - start };
     counts = { hypchecks: stats.hypchecks, runs: stats.runs, insights: stats.insights };
+    const attempt = await getLastRunAttempt();
+    if (attempt) {
+      // A "running" attempt older than ~6 min never finished — the function was
+      // killed mid-run (hard timeout).
+      const ageMs = Date.now() - new Date(attempt.startedAt).getTime();
+      lastAttempt = { ...attempt, stale: attempt.status === "running" && ageMs > 6 * 60 * 1000 };
+    }
     if (stats.lastRun) {
       const r = stats.lastRun;
       lastRun = {
@@ -66,6 +75,7 @@ export async function GET() {
     db,
     counts,
     lastRun,
+    lastAttempt,
   };
 
   return NextResponse.json(body, { status: db.ok ? 200 : 503 });
