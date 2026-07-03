@@ -10,9 +10,11 @@ import {
   getHypcheck,
   getInsight,
   setInsightStatus,
+  setLastRunAttempt,
   updateHypcheckSettings,
   type CreateHypcheckInput,
 } from "./store";
+import { engineInfo } from "./engine";
 import type { Cadence, Depth, RefineResult } from "./types";
 import { logger, newRequestId } from "./logger";
 
@@ -42,6 +44,20 @@ export async function createHypcheckAction(input: CreateHypcheckInput): Promise<
 export async function runNowAction(hypcheckId: string): Promise<void> {
   const log = actionLogger("runNow", { hypcheckId });
   await log.span("action.runNow", async () => {
+    // Earliest possible marker — if this never lands, the function died before
+    // our code even reached the DB (cold-start / init). executeRun overwrites
+    // it with the real hypcheck name once the read succeeds.
+    try {
+      await setLastRunAttempt({
+        status: "running",
+        hypcheckId,
+        hypcheckName: "(loading)",
+        model: engineInfo().model,
+        startedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      log.warn("action.runNow.marker_failed", { err: String(err) });
+    }
     const hypcheck = await getHypcheck(hypcheckId);
     if (!hypcheck) throw new Error("Hypcheck not found");
     await executeRun(hypcheck, log);

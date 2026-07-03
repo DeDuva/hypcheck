@@ -134,13 +134,16 @@ async function init(): Promise<Client> {
     client = createClient({ url: `file:${path.join(dir, "hypcheck.db")}` });
   }
   try {
-    for (const stmt of SCHEMA.split(";")) {
-      const sql = stmt.trim();
-      if (sql) await client.execute(sql);
-    }
+    // Batch the schema (idempotent CREATEs) into ONE round trip. Sequential
+    // execution was ~13 round trips — punishing on a cross-region DB and a
+    // prime suspect for cold-start functions exceeding their time budget.
+    const schemaStatements = SCHEMA.split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    await client.batch(schemaStatements, "write");
     await migrate(client);
     instrument(client);
-    logger.info("db.init", { backend, ms: Date.now() - start });
+    logger.info("db.init", { backend, ms: Date.now() - start, statements: schemaStatements.length });
     return client;
   } catch (err) {
     logger.error("db.init.fail", { backend, err: serializeError(err) });
