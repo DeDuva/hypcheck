@@ -1,17 +1,24 @@
 export type RunOutcome = "ok" | "error" | "timeout";
 
+export interface RunTick {
+  status: "running" | "ok" | "error";
+  phase?: string;
+  researchMs?: number;
+}
+
 /**
- * Poll /api/health until the given hypcheck's run attempt reaches a terminal
- * state. The research runs in the background (decoupled from the click), so the
- * client watches the persisted attempt marker instead of awaiting the action.
+ * Watch a hypcheck's run attempt to completion by polling /api/health. Calls
+ * `onTick` with the latest attempt state (status + phase) each poll, and
+ * resolves with the terminal outcome. The timeout matches the server function
+ * budget so a legitimately long run is never abandoned before it finishes.
  */
-export async function pollRun(
+export async function watchRun(
   hypcheckId: string,
-  opts: { timeoutMs?: number; intervalMs?: number; since?: number } = {}
+  opts: { since: number; onTick?: (t: RunTick) => void; timeoutMs?: number; intervalMs?: number }
 ): Promise<RunOutcome> {
-  const timeoutMs = opts.timeoutMs ?? 330_000; // a little over the 300s function budget
-  const intervalMs = opts.intervalMs ?? 4_000;
-  const since = opts.since ?? Date.now();
+  const timeoutMs = opts.timeoutMs ?? 780_000; // just under the 800s function budget
+  const intervalMs = opts.intervalMs ?? 3_000;
+  const { since } = opts;
   const start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
@@ -21,14 +28,11 @@ export async function pollRun(
       if (!res.ok) continue;
       const data = await res.json();
       const a = data?.lastAttempt;
-      if (
-        a &&
-        a.hypcheckId === hypcheckId &&
-        a.status !== "running" &&
-        new Date(a.updatedAt ?? a.startedAt).getTime() >= since - 5_000
-      ) {
-        return a.status === "ok" ? "ok" : "error";
-      }
+      if (!a || a.hypcheckId !== hypcheckId) continue;
+      const updated = new Date(a.updatedAt ?? a.startedAt).getTime();
+      if (updated < since - 5_000) continue; // stale marker from a prior run
+      opts.onTick?.({ status: a.status, phase: a.phase, researchMs: a.researchMs });
+      if (a.status !== "running") return a.status === "ok" ? "ok" : "error";
     } catch {
       // transient — keep polling
     }

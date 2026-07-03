@@ -1,46 +1,45 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { runNowAction } from "@/lib/actions";
-import { pollRun } from "@/lib/runStatus";
+import { RunProgress } from "./RunProgress";
+import type { RunOutcome } from "@/lib/runStatus";
 
 export function RunNowButton({ hypcheckId, live }: { hypcheckId: string; live: boolean }) {
-  const [pending, startTransition] = useTransition();
+  const [running, setRunning] = useState(false);
+  const [since, setSince] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
-  function run() {
+  async function run() {
     setError(null);
-    startTransition(async () => {
-      const since = Date.now();
-      try {
-        await runNowAction(hypcheckId); // returns immediately; research runs in the background
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(`Couldn’t start the run: ${message}`);
-        return;
-      }
-      const outcome = await pollRun(hypcheckId, { since });
-      if (outcome === "ok") {
-        router.refresh();
-      } else if (outcome === "error") {
-        setError("The research run hit an error. See /api/health (lastAttempt) for details.");
-      } else {
-        setError("Still researching — this run is taking a while. It’ll appear once it finishes; refresh in a minute.");
-      }
-    });
+    const start = Date.now();
+    setSince(start);
+    setRunning(true);
+    try {
+      await runNowAction(hypcheckId); // returns immediately; research runs in the background
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Couldn’t start the run: ${message}`);
+      setRunning(false);
+    }
+    // completion is handled by RunProgress (polls + auto-refreshes)
+  }
+
+  function onFinished(outcome: RunOutcome) {
+    setRunning(false);
+    if (outcome === "error") setError("The research run hit an error. See /api/health (lastAttempt) for details.");
+    // "ok" refreshes the page in place; "timeout" is effectively never with the full budget.
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex flex-col items-end gap-2">
       <button
         type="button"
-        disabled={pending}
+        disabled={running}
         onClick={run}
         className="inline-flex items-center gap-1.5 rounded-lg bg-iris px-3.5 py-2 text-[13px] font-medium text-white shadow-card transition-colors hover:bg-iris-deep disabled:cursor-wait disabled:opacity-60"
       >
-        {pending ? (
+        {running ? (
           <>
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="animate-spin" aria-hidden>
               <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
@@ -57,12 +56,8 @@ export function RunNowButton({ hypcheckId, live }: { hypcheckId: string; live: b
           </>
         )}
       </button>
-      {pending && live && (
-        <p className="max-w-[220px] text-right text-[11.5px] leading-snug text-ink-faint">
-          Researching in the background — this can take a minute or two.
-        </p>
-      )}
-      {error && <p className="max-w-[220px] text-right text-[11.5px] leading-snug text-rose-600">{error}</p>}
+      {running && <RunProgress hypcheckId={hypcheckId} since={since} onFinished={onFinished} />}
+      {error && <p className="max-w-[260px] text-right text-[11.5px] leading-snug text-rose-600">{error}</p>}
     </div>
   );
 }
