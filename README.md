@@ -41,4 +41,4 @@ To enable live research, copy `.env.example` to `.env.local` and set `ANTHROPIC_
 
 ## Stack
 
-Next.js (App Router) · TypeScript · Tailwind CSS v4 · Recharts · libSQL (local file / Turso) · Anthropic SDK (`claude-opus-4-8`, web search + structured outputs).
+Next.js (App Router) · TypeScript · Tailwind CSS v4 · Recharts · libSQL (local file / Turso) · Anthropic SDK (`claude-sonnet-4-6` research + `claude-haiku-4-5` extraction, web search + structured outputs).

@@ -3,7 +3,10 @@ import type { Depth, Hypcheck, HypothesisVersion, Metric, RefineResult, RunResul
 import { DEPTH_LABELS } from "../types";
 import { Logger, logger as rootLogger } from "../logger";
 
-const MODEL = process.env.HYPCHECK_MODEL || "claude-opus-4-8";
+// Sonnet is the default research model: ~2-3x faster than Opus at web-grounded
+// synthesis, which keeps a run (incl. the industry-analysis section) well under
+// Vercel's 300s function ceiling. Override with HYPCHECK_MODEL for max depth.
+const MODEL = process.env.HYPCHECK_MODEL || "claude-sonnet-4-6";
 // The extraction pass only reformats the report into JSON — a fast model does
 // it well and shaves seconds off the run, which matters under a tight
 // (e.g. Vercel Hobby 60s) function budget.
@@ -188,6 +191,8 @@ export async function liveRun(
     model: MODEL,
     max_tokens: DEPTH_TOKENS[hypcheck.depth],
     thinking: { type: "adaptive" },
+    // Bound thinking so the run stays comfortably under the function limit.
+    output_config: { effort: "medium" },
     tools: [{ type: "web_search_20260209", name: "web_search", max_uses: DEPTH_SEARCHES[hypcheck.depth] }],
     messages: [{ role: "user", content: researchPrompt }],
   });
