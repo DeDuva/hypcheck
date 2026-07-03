@@ -5,8 +5,8 @@ import { ensureSeeded } from "@/lib/seed";
 import { logger, newRequestId, serializeError } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
-// Live research runs can take several minutes at deep settings.
-export const maxDuration = 300;
+// Live research runs can take several minutes; Pro + Fluid Compute allows 800s.
+export const maxDuration = 800;
 
 /**
  * Scheduled-run endpoint. Vercel Cron hits this on the schedule in vercel.json

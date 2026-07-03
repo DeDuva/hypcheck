@@ -13,9 +13,10 @@ import { DiffView } from "@/components/DiffView";
 import { reviseHypothesisAction } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
-// Live research runs can take several minutes at deep settings; this route
-// hosts runNowAction (manual "Run now" + the auto first-run trigger below).
-export const maxDuration = 300;
+// This route hosts runNowAction, whose after() callback runs the (long) live
+// research in the background — so it needs the extended budget. Pro + Fluid
+// Compute (default) allows up to 800s.
+export const maxDuration = 800;
 
 export default async function HypcheckOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
