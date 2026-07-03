@@ -8,10 +8,14 @@ import { ModeBadge, ScoreChip } from "@/components/ScoreChip";
 import { DeltaBadge } from "@/components/DeltaBadge";
 import { InsightCard } from "@/components/InsightsPanel";
 import { RunNowButton } from "@/components/RunNowButton";
+import { FirstRunTrigger } from "@/components/FirstRunTrigger";
 import { DiffView } from "@/components/DiffView";
 import { reviseHypothesisAction } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
+// Live research runs can take several minutes at deep settings; this route
+// hosts runNowAction (manual "Run now" + the auto first-run trigger below).
+export const maxDuration = 300;
 
 export default async function HypcheckOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -225,7 +229,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
         {points.length ? (
           <PmfChart points={points} hypcheckId={id} />
         ) : (
-          <p className="py-12 text-center text-[13px] text-ink-soft">No runs yet — trigger one with “Run now”.</p>
+          <FirstRunTrigger hypcheckId={id} live={Boolean(process.env.ANTHROPIC_API_KEY)} />
         )}
       </section>
 
