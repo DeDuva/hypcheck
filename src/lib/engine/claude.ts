@@ -12,14 +12,13 @@ const MODEL = process.env.HYPCHECK_MODEL || "claude-sonnet-4-6";
 // (e.g. Vercel Hobby 60s) function budget.
 const EXTRACT_MODEL = process.env.HYPCHECK_EXTRACT_MODEL || "claude-haiku-4-5";
 
-// Search budget dominates wall-clock (each search ingests large page content),
-// so keep it small to fit inside the serverless function limit.
-const DEPTH_SEARCHES: Record<Depth, number> = { brief: 2, standard: 3, deep: 5 };
-const DEPTH_TOKENS: Record<Depth, number> = { brief: 4000, standard: 8000, deep: 14000 };
-// Hard backstop: abort the research call before the function budget (300s) so a
-// runaway run falls back to a recorded result instead of getting killed and
-// stuck "running" forever.
-const RESEARCH_ABORT_MS = Number(process.env.HYPCHECK_RESEARCH_ABORT_MS) || 230_000;
+const DEPTH_SEARCHES: Record<Depth, number> = { brief: 3, standard: 5, deep: 8 };
+const DEPTH_TOKENS: Record<Depth, number> = { brief: 6000, standard: 12000, deep: 24000 };
+// Hard backstop: abort research before the function budget (Vercel Pro + Fluid
+// Compute allows up to 800s) so a runaway run falls back to a recorded result
+// instead of getting killed and stuck "running". Comfortably above a normal
+// ~200-300s research call; well below the 800s route budget.
+const RESEARCH_ABORT_MS = Number(process.env.HYPCHECK_RESEARCH_ABORT_MS) || 600_000;
 
 export function liveEngineAvailable(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -198,8 +197,7 @@ export async function liveRun(
       model: MODEL,
       max_tokens: DEPTH_TOKENS[hypcheck.depth],
       thinking: { type: "adaptive" },
-      // Keep thinking short so the run stays comfortably under the function limit.
-      output_config: { effort: "low" },
+      output_config: { effort: "medium" },
       tools: [{ type: "web_search_20260209", name: "web_search", max_uses: DEPTH_SEARCHES[hypcheck.depth] }],
       messages: [{ role: "user", content: researchPrompt }],
     },
