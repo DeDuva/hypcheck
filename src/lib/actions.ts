@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { executeRun, refineHypothesis } from "./engine";
 import {
   addVersion,
@@ -16,7 +17,7 @@ import {
 } from "./store";
 import { engineInfo } from "./engine";
 import type { Cadence, Depth, RefineResult } from "./types";
-import { logger, newRequestId } from "./logger";
+import { logger, newRequestId, serializeError } from "./logger";
 
 /** Every server action runs inside a correlated span so it's traceable in logs. */
 function actionLogger(action: string, ctx: Record<string, unknown> = {}) {
@@ -41,28 +42,38 @@ export async function createHypcheckAction(input: CreateHypcheckInput): Promise<
   });
 }
 
+/**
+ * Kick off a research run WITHOUT blocking the request on it. The long Claude
+ * research call runs in `after()` — after the response is sent — so the click
+ * returns immediately and can never hit the request timeout. The client polls
+ * /api/health (lastAttempt) until the run lands. Research still gets the full
+ * background function budget.
+ */
 export async function runNowAction(hypcheckId: string): Promise<void> {
   const log = actionLogger("runNow", { hypcheckId });
-  await log.span("action.runNow", async () => {
-    // Earliest possible marker — if this never lands, the function died before
-    // our code even reached the DB (cold-start / init). executeRun overwrites
-    // it with the real hypcheck name once the read succeeds.
-    try {
-      await setLastRunAttempt({
-        status: "running",
-        hypcheckId,
-        hypcheckName: "(loading)",
-        model: engineInfo().model,
-        startedAt: new Date().toISOString(),
-      });
-    } catch (err) {
-      log.warn("action.runNow.marker_failed", { err: String(err) });
-    }
-    const hypcheck = await getHypcheck(hypcheckId);
-    if (!hypcheck) throw new Error("Hypcheck not found");
-    await executeRun(hypcheck, log);
-    revalidatePath("/", "layout");
+  const hypcheck = await getHypcheck(hypcheckId);
+  if (!hypcheck) throw new Error("Hypcheck not found");
+
+  // Mark it running now so the UI (and its poll) has immediate state.
+  await setLastRunAttempt({
+    status: "running",
+    hypcheckId,
+    hypcheckName: hypcheck.name,
+    model: engineInfo().model,
+    startedAt: new Date().toISOString(),
   });
+  log.info("runNow.scheduled", { hypcheckName: hypcheck.name });
+
+  after(async () => {
+    try {
+      await executeRun(hypcheck, log);
+    } catch (err) {
+      // executeRun already records an "error" attempt marker; this is a backstop.
+      log.error("runNow.background.fail", { err: serializeError(err) });
+    }
+  });
+
+  revalidatePath("/", "layout");
 }
 
 export async function acceptInsightAction(insightId: string): Promise<void> {
