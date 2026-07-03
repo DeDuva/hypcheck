@@ -412,6 +412,22 @@ export async function setLastRunAttempt(a: RunAttempt): Promise<void> {
   });
 }
 
+/** Probe whether the DB accepts writes (reads can succeed while writes fail). */
+export async function probeWrite(): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  const db = await getDb();
+  const start = Date.now();
+  try {
+    await db.execute({
+      sql: `INSERT INTO app_meta (key, value, updated_at) VALUES ('health_probe', ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      args: [new Date().toISOString(), new Date().toISOString()],
+    });
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - start, error: String(err) };
+  }
+}
+
 export async function getLastRunAttempt(): Promise<(RunAttempt & { updatedAt: string }) | null> {
   const db = await getDb();
   const res = await db.execute("SELECT value, updated_at FROM app_meta WHERE key = 'last_run_attempt'");

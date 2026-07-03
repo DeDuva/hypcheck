@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDbStats, getLastRunAttempt, type RunAttempt } from "@/lib/store";
+import { getDbStats, getLastRunAttempt, probeWrite, type RunAttempt } from "@/lib/store";
 import { engineInfo } from "@/lib/engine";
 import { logger, newRequestId, serializeError } from "@/lib/logger";
 
@@ -12,10 +12,13 @@ export const dynamic = "force-dynamic";
  * — which is exactly what you need to diagnose the recurring "runs time out"
  * failure mode. Exposes no secrets (only booleans and the model name).
  */
-export async function GET() {
+export async function GET(request: Request) {
   const log = logger.child({ route: "health", reqId: newRequestId() });
   const engine = engineInfo();
   const backend = process.env.TURSO_DATABASE_URL ? "turso" : "file";
+  // Opt-in write probe (?write=1) — reads can succeed while writes fail.
+  const wantWriteProbe = new URL(request.url).searchParams.get("write") === "1";
+  let writeProbe: { ok: boolean; latencyMs: number; error?: string } | null = null;
 
   let db: { backend: string; ok: boolean; latencyMs: number | null; error?: string };
   let counts: { hypchecks: number; runs: number; insights: number } | null = null;
@@ -43,6 +46,7 @@ export async function GET() {
       const ageMs = Date.now() - new Date(attempt.startedAt).getTime();
       lastAttempt = { ...attempt, stale: attempt.status === "running" && ageMs > 6 * 60 * 1000 };
     }
+    if (wantWriteProbe) writeProbe = await probeWrite();
     if (stats.lastRun) {
       const r = stats.lastRun;
       lastRun = {
@@ -73,6 +77,7 @@ export async function GET() {
     },
     logLevel: process.env.HYPCHECK_LOG_LEVEL ?? (process.env.NODE_ENV === "production" ? "info" : "debug"),
     db,
+    writeProbe,
     counts,
     lastRun,
     lastAttempt,
