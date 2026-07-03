@@ -21,8 +21,9 @@ export async function refineAction(statement: string): Promise<RefineResult & { 
 
 export async function createHypcheckAction(input: CreateHypcheckInput): Promise<void> {
   const hypcheck = await createHypcheck(input);
-  // Establish the first data point immediately so the overview isn't empty.
-  await executeRun(hypcheck);
+  // The first run (especially live research) can take well past a platform
+  // request timeout, so don't block navigation on it — the overview page
+  // triggers it client-side via runNowAction once the user lands there.
   revalidatePath("/", "layout");
   redirect(`/hypcheck/${hypcheck.id}`);
 }
