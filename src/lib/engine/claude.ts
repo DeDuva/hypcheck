@@ -145,12 +145,15 @@ interface StructuredResult {
   watchlistNotes: Array<{ name: string; note: string }>;
 }
 
+export type PhaseReporter = (phase: string, extra?: Record<string, unknown>) => void | Promise<void>;
+
 export async function liveRun(
   hypcheck: Hypcheck,
   version: HypothesisVersion,
   metrics: Metric[],
   priorContext: string | null,
-  log: Logger = rootLogger
+  log: Logger = rootLogger,
+  onPhase?: PhaseReporter
 ): Promise<LiveRunOutput> {
   const anthropic = client();
   const runDate = new Date();
@@ -170,21 +173,23 @@ export async function liveRun(
     priorContext ? `## Context from the previous run\n${priorContext}` : ``,
     ``,
     `## Instructions`,
-    `- Research depth: ${DEPTH_LABELS[hypcheck.depth]}.`,
+    `- Research depth: ${DEPTH_LABELS[hypcheck.depth]}. Run at most ${DEPTH_SEARCHES[hypcheck.depth]} web searches total for this entire report — budget them across the whole task, front-loading the searches you need to assess the metrics and the watchlist.`,
     `- Ground every claim in what you find; cite the source inline as a markdown link.`,
     `- Assess each metric, then derive an overall PMF score (0-100) as a weighted judgment.`,
     `- Surface 1-3 insights. Mark each as supporting, challenging, or watch. If an insight genuinely warrants amending the hypothesis, include a complete proposed revision of the hypothesis statement.`,
     `- End with key risks and recommended actions for the product manager.`,
     ``,
     `## The Industry Analysis section (write this as a world-class strategy analyst)`,
-    `Immediately after the Executive summary, write a section titled "## Industry Analysis" that reads like a sell-side/strategy analyst note for a leadership team. It must be tight — no more than two pages. Structure it exactly as:`,
+    `Immediately after the Executive summary, write a section titled "## Industry Analysis" that reads like a sell-side/strategy analyst note for a leadership team. It must be tight — no more than two pages.`,
+    `IMPORTANT: do NOT run additional web searches specifically for this section. Synthesize it from the research and sources you already gathered for the signal analysis and watchlist above. This is analysis and judgment, not more searching.`,
+    `Structure it exactly as:`,
     `- Open with an **Analyst's call**: one of Accelerate / Advance / Hold / Reposition / Retreat, plus a conviction level (low/moderate/high), then a one-line rationale.`,
     `- A BLUF headline (1-2 sentences): the single most important thing leadership should understand about the industry right now and what it implies for this hypothesis.`,
-    `- **Landscape**: market structure, where the category sits in its lifecycle (forming / early-growth / consolidating / mature), and momentum. Ground in current news and data.`,
-    `- **Competitive dynamics**: concrete recent moves by the watchlist players and adjacent entrants (launches, funding, M&A, pricing, platform/roadmap signals) — who is gaining, who is exposed, and where the whitespace and moat are.`,
+    `- **Landscape**: market structure, where the category sits in its lifecycle (forming / early-growth / consolidating / mature), and momentum.`,
+    `- **Competitive dynamics**: recent moves by the watchlist players and adjacent entrants — who is gaining, who is exposed, and where the whitespace and moat are.`,
     `- **Catalysts & signals to watch**: 2-4 recent or forward-looking events that move (or could move) the market.`,
     `- **Implications for the hypothesis**: the "so what" — how this context strengthens or pressures the thesis, and the strategic option it points to.`,
-    `Be opinionated and evidence-based; every non-obvious claim gets an inline source link. The Analyst's call must be consistent with the PMF evidence.`,
+    `Be opinionated and evidence-based, drawing on the sources already gathered. The Analyst's call must be consistent with the PMF evidence.`,
     ``,
     `Write the full report in markdown with these sections in order: Executive summary, Industry Analysis, Signal analysis (one subsection per metric with a 0-100 score), Insights, Key risks, Recommended actions, Sources.`,
   ]
@@ -204,9 +209,11 @@ export async function liveRun(
     { signal: AbortSignal.timeout(RESEARCH_ABORT_MS) }
   );
   const research = await stream.finalMessage();
+  const researchMs = Date.now() - researchStart;
   const searches = webSearchRequests(research.usage);
+  await onPhase?.("research_done", { researchMs, searches });
   log.info("engine.research.done", {
-    ms: Date.now() - researchStart,
+    ms: researchMs,
     model: MODEL,
     depth: hypcheck.depth,
     inputTokens: research.usage.input_tokens,

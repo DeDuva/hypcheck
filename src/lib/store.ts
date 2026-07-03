@@ -395,6 +395,8 @@ export interface RunAttempt {
   hypcheckName: string;
   model: string;
   startedAt: string;
+  phase?: string; // coarse progress within a running attempt (e.g. research_done)
+  researchMs?: number;
   finishedAt?: string;
   durationMs?: number;
   mode?: string;

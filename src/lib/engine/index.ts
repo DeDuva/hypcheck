@@ -57,7 +57,19 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
           ? `Previous run (${prior.runAt.slice(0, 10)}, hypothesis v${prior.hypothesisVersion}) scored ${prior.pmfScore}/100. Summary: ${prior.execSummary}`
           : null;
         try {
-          const { result, telemetry } = await liveRun(hypcheck, version, metrics, priorContext, log);
+          // Report coarse progress into the attempt marker so a mid-run poll of
+          // /api/health shows whether the (long) research call actually finished.
+          const onPhase = (phase: string, extra: Record<string, unknown> = {}) =>
+            safeSetAttempt(log, {
+              status: "running",
+              hypcheckId: hypcheck.id,
+              hypcheckName: hypcheck.name,
+              model,
+              startedAt,
+              phase,
+              researchMs: typeof extra.researchMs === "number" ? extra.researchMs : undefined,
+            });
+          const { result, telemetry } = await liveRun(hypcheck, version, metrics, priorContext, log, onPhase);
           run = await recordRun(hypcheck.id, version, "live", result, new Date(), {
             durationMs: Date.now() - start,
             ...telemetry,
