@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Depth, Hypcheck, HypothesisVersion, Metric, RefineResult, RunResult } from "../types";
+import type { Depth, Hypcheck, HypothesisVersion, Metric, RefineResult, RunResult, RunTelemetry } from "../types";
 import { DEPTH_LABELS } from "../types";
+import { Logger, logger as rootLogger } from "../logger";
 
 const MODEL = process.env.HYPCHECK_MODEL || "claude-opus-4-8";
 
@@ -9,6 +10,22 @@ const DEPTH_TOKENS: Record<Depth, number> = { brief: 8000, standard: 16000, deep
 
 export function liveEngineAvailable(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
+/** Non-secret engine config, for the health endpoint and logs. */
+export function engineInfo(): { model: string; hasKey: boolean } {
+  return { model: MODEL, hasKey: liveEngineAvailable() };
+}
+
+export type LiveTelemetry = Pick<RunTelemetry, "inputTokens" | "outputTokens" | "searches">;
+export interface LiveRunOutput {
+  result: RunResult;
+  telemetry: LiveTelemetry;
+}
+
+function webSearchRequests(usage: Anthropic.Usage): number | null {
+  const serverToolUse = (usage as unknown as { server_tool_use?: { web_search_requests?: number } }).server_tool_use;
+  return serverToolUse?.web_search_requests ?? null;
 }
 
 function client(): Anthropic {
@@ -89,8 +106,9 @@ export async function liveRun(
   hypcheck: Hypcheck,
   version: HypothesisVersion,
   metrics: Metric[],
-  priorContext: string | null
-): Promise<RunResult> {
+  priorContext: string | null,
+  log: Logger = rootLogger
+): Promise<LiveRunOutput> {
   const anthropic = client();
   const runDate = new Date();
 
@@ -120,6 +138,7 @@ export async function liveRun(
     .filter(Boolean)
     .join("\n");
 
+  const researchStart = Date.now();
   const stream = anthropic.messages.stream({
     model: MODEL,
     max_tokens: DEPTH_TOKENS[hypcheck.depth],
@@ -128,12 +147,26 @@ export async function liveRun(
     messages: [{ role: "user", content: researchPrompt }],
   });
   const research = await stream.finalMessage();
+  const searches = webSearchRequests(research.usage);
+  log.info("engine.research.done", {
+    ms: Date.now() - researchStart,
+    model: MODEL,
+    depth: hypcheck.depth,
+    inputTokens: research.usage.input_tokens,
+    outputTokens: research.usage.output_tokens,
+    searches,
+    stopReason: research.stop_reason,
+  });
   const reportMd = research.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("\n");
+  if (!reportMd.trim()) {
+    throw new Error(`Live research returned no report text (stop_reason: ${research.stop_reason})`);
+  }
 
   // Second pass: distill the research report into the structured run result.
+  const extractStart = Date.now();
   const structured = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 8000,
@@ -151,6 +184,12 @@ export async function liveRun(
           .join("\n"),
       },
     ],
+  });
+  log.info("engine.extract.done", {
+    ms: Date.now() - extractStart,
+    inputTokens: structured.usage.input_tokens,
+    outputTokens: structured.usage.output_tokens,
+    stopReason: structured.stop_reason,
   });
 
   const jsonText = structured.content
@@ -171,12 +210,19 @@ export async function liveRun(
   });
 
   return {
-    pmfScore: Math.max(0, Math.min(100, data.pmfScore)),
-    confidence: Math.max(0, Math.min(1, data.confidence)),
-    execSummary: data.execSummary,
-    reportMd: `${reportMd}\n\n---\n\n*Report generated ${runDate.toISOString().slice(0, 10)} by live web research (${DEPTH_LABELS[hypcheck.depth]}).*\n`,
-    metricScores,
-    insights: data.insights,
+    result: {
+      pmfScore: Math.max(0, Math.min(100, data.pmfScore)),
+      confidence: Math.max(0, Math.min(1, data.confidence)),
+      execSummary: data.execSummary,
+      reportMd: `${reportMd}\n\n---\n\n*Report generated ${runDate.toISOString().slice(0, 10)} by live web research (${DEPTH_LABELS[hypcheck.depth]}).*\n`,
+      metricScores,
+      insights: data.insights,
+    },
+    telemetry: {
+      inputTokens: research.usage.input_tokens + structured.usage.input_tokens,
+      outputTokens: research.usage.output_tokens + structured.usage.output_tokens,
+      searches,
+    },
   };
 }
 
@@ -214,8 +260,9 @@ const REFINE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-export async function liveRefine(statement: string): Promise<RefineResult> {
+export async function liveRefine(statement: string, log: Logger = rootLogger): Promise<RefineResult> {
   const anthropic = client();
+  const start = Date.now();
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 4000,
@@ -226,6 +273,13 @@ export async function liveRefine(statement: string): Promise<RefineResult> {
         content: `You are a seasoned product strategy advisor. A product manager has drafted this product hypothesis:\n\n"${statement}"\n\nCritique it, rewrite it to be sharp and falsifiable, propose 4-5 weighted signal metrics for tracking product-market fit over time, and suggest a competitive watchlist.`,
       },
     ],
+  });
+  log.info("engine.refine.done", {
+    ms: Date.now() - start,
+    model: MODEL,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+    stopReason: response.stop_reason,
   });
   const jsonText = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")

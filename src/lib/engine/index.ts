@@ -1,36 +1,62 @@
 import type { Hypcheck, RefineResult, Run } from "../types";
 import { currentVersion, latestRun, listMetrics, recordRun, setNextRun } from "../store";
-import { liveEngineAvailable, liveRefine, liveRun } from "./claude";
+import { engineInfo, liveEngineAvailable, liveRefine, liveRun } from "./claude";
 import { simulateRun } from "./simulate";
+import { Logger, logger, newRequestId, serializeError } from "../logger";
 
 /** Execute a research run for a hypcheck and persist the result. */
-export async function executeRun(hypcheck: Hypcheck): Promise<Run> {
-  const version = await currentVersion(hypcheck.id);
-  const metrics = await listMetrics(hypcheck.id);
-  const prior = await latestRun(hypcheck.id);
+export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger): Promise<Run> {
+  const log = parentLog.child({ runId: newRequestId(), hypcheckId: hypcheck.id });
+  return log.span(
+    "engine.executeRun",
+    async () => {
+      const version = await currentVersion(hypcheck.id);
+      const metrics = await listMetrics(hypcheck.id);
+      const prior = await latestRun(hypcheck.id);
+      const start = Date.now();
 
-  let run: Run;
-  if (liveEngineAvailable()) {
-    const priorContext = prior
-      ? `Previous run (${prior.runAt.slice(0, 10)}, hypothesis v${prior.hypothesisVersion}) scored ${prior.pmfScore}/100. Summary: ${prior.execSummary}`
-      : null;
-    try {
-      const result = await liveRun(hypcheck, version, metrics, priorContext);
-      run = await recordRun(hypcheck.id, version, "live", result);
-    } catch (err) {
-      // Fall back to the simulated engine so a transient API failure doesn't
-      // leave a scheduled run silently missing from the timeline.
-      console.error(`Live run failed for ${hypcheck.id}, falling back to simulated:`, err);
-      const result = simulateRun(hypcheck, version, metrics, new Date(), prior?.pmfScore ?? null);
-      run = await recordRun(hypcheck.id, version, "simulated", result);
-    }
-  } else {
-    const result = simulateRun(hypcheck, version, metrics, new Date(), prior?.pmfScore ?? null);
-    run = await recordRun(hypcheck.id, version, "simulated", result);
-  }
+      let run: Run;
+      let fellBack = false;
+      if (liveEngineAvailable()) {
+        const priorContext = prior
+          ? `Previous run (${prior.runAt.slice(0, 10)}, hypothesis v${prior.hypothesisVersion}) scored ${prior.pmfScore}/100. Summary: ${prior.execSummary}`
+          : null;
+        try {
+          const { result, telemetry } = await liveRun(hypcheck, version, metrics, priorContext, log);
+          run = await recordRun(hypcheck.id, version, "live", result, new Date(), {
+            durationMs: Date.now() - start,
+            ...telemetry,
+          });
+        } catch (err) {
+          // Fall back to the simulated engine so a transient API failure doesn't
+          // leave a scheduled run silently missing from the timeline.
+          fellBack = true;
+          log.warn("engine.live.fallback", { err: serializeError(err) });
+          const result = simulateRun(hypcheck, version, metrics, new Date(), prior?.pmfScore ?? null);
+          run = await recordRun(hypcheck.id, version, "simulated", result, new Date(), {
+            durationMs: Date.now() - start,
+          });
+        }
+      } else {
+        const result = simulateRun(hypcheck, version, metrics, new Date(), prior?.pmfScore ?? null);
+        run = await recordRun(hypcheck.id, version, "simulated", result, new Date(), {
+          durationMs: Date.now() - start,
+        });
+      }
 
-  await setNextRun(hypcheck.id, hypcheck.cadence);
-  return run;
+      await setNextRun(hypcheck.id, hypcheck.cadence);
+      log.info("engine.run.recorded", {
+        recordedRunId: run.id,
+        mode: run.mode,
+        score: run.pmfScore,
+        version: run.hypothesisVersion,
+        fellBack,
+        ms: Date.now() - start,
+      });
+      return run;
+    },
+    { hypcheckName: hypcheck.name, cadence: hypcheck.cadence, depth: hypcheck.depth, live: liveEngineAvailable() }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,14 +96,21 @@ function heuristicRefine(statement: string): RefineResult {
   };
 }
 
-export async function refineHypothesis(statement: string): Promise<RefineResult & { mode: "live" | "heuristic" }> {
+export async function refineHypothesis(
+  statement: string,
+  parentLog: Logger = logger
+): Promise<RefineResult & { mode: "live" | "heuristic" }> {
+  const log = parentLog.child({ op: "refine" });
   if (liveEngineAvailable()) {
     try {
-      const result = await liveRefine(statement);
+      const result = await liveRefine(statement, log);
       return { ...result, mode: "live" };
     } catch (err) {
-      console.error("Live refine failed, using heuristic:", err);
+      log.warn("engine.refine.fallback", { err: serializeError(err) });
     }
   }
   return { ...heuristicRefine(statement), mode: "heuristic" };
 }
+
+/** Re-exported so server routes/actions can report engine config without importing claude.ts. */
+export { engineInfo };

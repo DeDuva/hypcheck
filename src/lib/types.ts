@@ -41,6 +41,13 @@ export interface MetricScore {
   note: string;
 }
 
+export interface RunTelemetry {
+  durationMs: number | null; // wall-clock of the engine compute
+  inputTokens: number | null; // live runs only
+  outputTokens: number | null; // live runs only
+  searches: number | null; // web_search requests, live runs only
+}
+
 export interface Run {
   id: string;
   hypcheckId: string;
@@ -53,6 +60,7 @@ export interface Run {
   execSummary: string;
   reportMd: string;
   metricScores: MetricScore[];
+  telemetry: RunTelemetry;
 }
 
 export interface Insight {

@@ -1,5 +1,6 @@
 import { getDb, newId } from "./db";
 import { buildReportMd } from "./engine/report";
+import { logger } from "./logger";
 import type { Cadence, Depth, InsightDirection, MetricScore } from "./types";
 
 interface SeedInsight {
@@ -305,7 +306,11 @@ export function ensureSeeded(): Promise<void> {
       const db = await getDb();
       const res = await db.execute("SELECT COUNT(*) AS c FROM hypchecks");
       const count = Number((res.rows[0] as Record<string, unknown>).c ?? 0);
-      if (count === 0) await seedDemoData();
+      if (count === 0) {
+        const start = Date.now();
+        await seedDemoData();
+        logger.info("seed.demo", { ms: Date.now() - start });
+      }
     })();
   }
   return seedPromise;

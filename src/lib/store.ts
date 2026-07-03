@@ -10,6 +10,7 @@ import type {
   MetricScore,
   Run,
   RunResult,
+  RunTelemetry,
   VersionSource,
 } from "./types";
 import { CADENCE_DAYS } from "./types";
@@ -64,6 +65,12 @@ function rowToRun(r: Row): Run {
     execSummary: r.exec_summary as string,
     reportMd: r.report_md as string,
     metricScores: JSON.parse((r.metric_scores as string) || "[]") as MetricScore[],
+    telemetry: {
+      durationMs: r.duration_ms == null ? null : Number(r.duration_ms),
+      inputTokens: r.input_tokens == null ? null : Number(r.input_tokens),
+      outputTokens: r.output_tokens == null ? null : Number(r.output_tokens),
+      searches: r.searches == null ? null : Number(r.searches),
+    },
   };
 }
 
@@ -258,15 +265,17 @@ export async function recordRun(
   version: HypothesisVersion,
   mode: Run["mode"],
   result: RunResult,
-  runAt: Date = new Date()
+  runAt: Date = new Date(),
+  telemetry: Partial<RunTelemetry> = {}
 ): Promise<Run> {
   const db = await getDb();
   const runId = newId();
   const at = runAt.toISOString();
   await db.execute({
     sql: `INSERT INTO runs (id, hypcheck_id, hypothesis_version_id, hypothesis_version, run_at, mode,
-            pmf_score, confidence, exec_summary, report_md, metric_scores)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            pmf_score, confidence, exec_summary, report_md, metric_scores,
+            duration_ms, input_tokens, output_tokens, searches)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       runId,
       hypcheckId,
@@ -279,6 +288,10 @@ export async function recordRun(
       result.execSummary,
       result.reportMd,
       JSON.stringify(result.metricScores),
+      telemetry.durationMs ?? null,
+      telemetry.inputTokens ?? null,
+      telemetry.outputTokens ?? null,
+      telemetry.searches ?? null,
     ],
   });
   for (const ins of result.insights) {
@@ -336,4 +349,32 @@ export async function countPendingProposals(hypcheckId: string): Promise<number>
     args: [hypcheckId],
   });
   return Number((res.rows[0] as Row).c ?? 0);
+}
+
+// ---------------------------------------------------------------------------
+// Observability
+// ---------------------------------------------------------------------------
+
+export interface DbStats {
+  hypchecks: number;
+  runs: number;
+  insights: number;
+  lastRun: Run | null;
+}
+
+/** Lightweight snapshot for the health endpoint; also exercises the DB connection. */
+export async function getDbStats(): Promise<DbStats> {
+  const db = await getDb();
+  const [hc, rn, ins, last] = await Promise.all([
+    db.execute("SELECT COUNT(*) AS c FROM hypchecks"),
+    db.execute("SELECT COUNT(*) AS c FROM runs"),
+    db.execute("SELECT COUNT(*) AS c FROM insights"),
+    db.execute("SELECT * FROM runs ORDER BY run_at DESC LIMIT 1"),
+  ]);
+  return {
+    hypchecks: Number((hc.rows[0] as Row).c ?? 0),
+    runs: Number((rn.rows[0] as Row).c ?? 0),
+    insights: Number((ins.rows[0] as Row).c ?? 0),
+    lastRun: last.rows[0] ? rowToRun(last.rows[0] as Row) : null,
+  };
 }
