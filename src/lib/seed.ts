@@ -1,6 +1,7 @@
 import { getDb, newId } from "./db";
 import { buildReportMd } from "./engine/report";
 import { logger } from "./logger";
+import { makeRng, synthIndustryAnalysis } from "./industry";
 import type { Cadence, Depth, InsightDirection, MetricScore } from "./types";
 
 interface SeedInsight {
@@ -250,6 +251,18 @@ export async function seedDemoData(): Promise<void> {
         watchlistNotes[w] = WATCH_NOTE_POOL[(i + wi) % WATCH_NOTE_POOL.length];
       });
 
+      const sortedByScore = [...metricScores].sort((a, b) => b.score - a.score);
+      const delta = i > 0 ? week.score - seed.weeks[i - 1].score : 0;
+      const industryAnalysis = synthIndustryAnalysis({
+        hypcheckName: seed.name,
+        watchlist: seed.watchlist,
+        score: week.score,
+        delta,
+        strongest: sortedByScore[0]?.name ?? null,
+        weakest: sortedByScore[sortedByScore.length - 1]?.name ?? null,
+        rand: makeRng(`${hypcheckId}:${i}:industry`),
+      });
+
       const reportMd = buildReportMd({
         name: seed.name,
         statement: version.statement,
@@ -260,6 +273,7 @@ export async function seedDemoData(): Promise<void> {
         pmfScore: week.score,
         confidence: 0.62 + ((i * 3) % 5) * 0.04,
         execSummary: week.summary,
+        industryAnalysis,
         metricScores,
         watchlist: seed.watchlist,
         watchlistNotes,
@@ -277,11 +291,11 @@ export async function seedDemoData(): Promise<void> {
       const runId = newId();
       await db.execute({
         sql: `INSERT INTO runs (id, hypcheck_id, hypothesis_version_id, hypothesis_version, run_at, mode,
-                pmf_score, confidence, exec_summary, report_md, metric_scores)
-              VALUES (?, ?, ?, ?, ?, 'simulated', ?, ?, ?, ?, ?)`,
+                pmf_score, confidence, exec_summary, report_md, metric_scores, industry_analysis)
+              VALUES (?, ?, ?, ?, ?, 'simulated', ?, ?, ?, ?, ?, ?)`,
         args: [
           runId, hypcheckId, versionIds[currentVersionIdx], currentVersionIdx + 1, runAt.toISOString(),
-          week.score, 0.62 + ((i * 3) % 5) * 0.04, week.summary, reportMd, JSON.stringify(metricScores),
+          week.score, 0.62 + ((i * 3) % 5) * 0.04, week.summary, reportMd, JSON.stringify(metricScores), JSON.stringify(industryAnalysis),
         ],
       });
 

@@ -65,6 +65,7 @@ function rowToRun(r: Row): Run {
     execSummary: r.exec_summary as string,
     reportMd: r.report_md as string,
     metricScores: JSON.parse((r.metric_scores as string) || "[]") as MetricScore[],
+    industryAnalysis: r.industry_analysis ? (JSON.parse(r.industry_analysis as string) as Run["industryAnalysis"]) : null,
     telemetry: {
       durationMs: r.duration_ms == null ? null : Number(r.duration_ms),
       inputTokens: r.input_tokens == null ? null : Number(r.input_tokens),
@@ -286,8 +287,8 @@ export async function recordRun(
     {
       sql: `INSERT INTO runs (id, hypcheck_id, hypothesis_version_id, hypothesis_version, run_at, mode,
               pmf_score, confidence, exec_summary, report_md, metric_scores,
-              duration_ms, input_tokens, output_tokens, searches)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              duration_ms, input_tokens, output_tokens, searches, industry_analysis)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         runId,
         hypcheckId,
@@ -304,6 +305,7 @@ export async function recordRun(
         telem.inputTokens,
         telem.outputTokens,
         telem.searches,
+        result.industryAnalysis ? JSON.stringify(result.industryAnalysis) : null,
       ],
     },
     ...result.insights.map((ins) => ({
@@ -326,6 +328,7 @@ export async function recordRun(
     execSummary: result.execSummary,
     reportMd: result.reportMd,
     metricScores: result.metricScores,
+    industryAnalysis: result.industryAnalysis,
     telemetry: telem,
   };
 }

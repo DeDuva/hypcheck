@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getHypcheck, getRun, listRuns } from "@/lib/store";
 import { formatDate } from "@/lib/format";
-import { ModeBadge, ScoreChip } from "@/components/ScoreChip";
+import { ModeBadge, ScoreChip, StanceBadge } from "@/components/ScoreChip";
 import { DeltaBadge } from "@/components/DeltaBadge";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +67,13 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       </div>
+
+      {run.industryAnalysis && (
+        <div className="mt-3 flex flex-wrap items-center gap-2.5">
+          <StanceBadge stance={run.industryAnalysis.stance} conviction={run.industryAnalysis.conviction} />
+          <span className="text-[12px] text-ink-faint">Full industry analysis in the report below.</span>
+        </div>
+      )}
 
       <article className="report-md mt-6 rounded-2xl border border-edge bg-surface px-7 py-8 shadow-card">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{run.reportMd}</ReactMarkdown>

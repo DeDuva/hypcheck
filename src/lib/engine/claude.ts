@@ -76,6 +76,25 @@ const RESULT_SCHEMA = {
         additionalProperties: false,
       },
     },
+    industryAnalysis: {
+      type: "object",
+      description: "Analyst-grade industry briefing (the '## Industry Analysis' section of the report), captured structured",
+      properties: {
+        headline: { type: "string", description: "BLUF: the single most important industry takeaway, 1-2 sentences" },
+        stance: {
+          type: "string",
+          enum: ["accelerate", "advance", "hold", "reposition", "retreat"],
+          description: "The analyst's call — the action the industry context implies for this hypothesis",
+        },
+        conviction: { type: "string", enum: ["low", "moderate", "high"] },
+        landscape: { type: "string", description: "Market structure, lifecycle stage, and momentum" },
+        competitiveDynamics: { type: "string", description: "Moves by watchlist players and adjacent entrants; whitespace" },
+        catalysts: { type: "array", items: { type: "string" }, description: "2-4 recent or upcoming events that move the market" },
+        implications: { type: "string", description: "The 'so what' for this hypothesis" },
+      },
+      required: ["headline", "stance", "conviction", "landscape", "competitiveDynamics", "catalysts", "implications"],
+      additionalProperties: false,
+    },
     risks: { type: "array", items: { type: "string" } },
     actions: { type: "array", items: { type: "string" } },
     watchlistNotes: {
@@ -91,15 +110,27 @@ const RESULT_SCHEMA = {
       },
     },
   },
-  required: ["pmfScore", "confidence", "execSummary", "metricScores", "insights", "risks", "actions", "watchlistNotes"],
+  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes"],
   additionalProperties: false,
 } as const;
+
+const STANCES = ["accelerate", "advance", "hold", "reposition", "retreat"] as const;
+const CONVICTIONS = ["low", "moderate", "high"] as const;
 
 interface StructuredResult {
   pmfScore: number;
   confidence: number;
   execSummary: string;
   metricScores: Array<{ name: string; score: number; note: string }>;
+  industryAnalysis: {
+    headline: string;
+    stance: (typeof STANCES)[number];
+    conviction: (typeof CONVICTIONS)[number];
+    landscape: string;
+    competitiveDynamics: string;
+    catalysts: string[];
+    implications: string;
+  };
   insights: Array<{ title: string; body: string; direction: "supporting" | "challenging" | "watch"; proposedRevision: string | null }>;
   risks: string[];
   actions: string[];
@@ -137,7 +168,17 @@ export async function liveRun(
     `- Surface 1-3 insights. Mark each as supporting, challenging, or watch. If an insight genuinely warrants amending the hypothesis, include a complete proposed revision of the hypothesis statement.`,
     `- End with key risks and recommended actions for the product manager.`,
     ``,
-    `Write the full report in markdown with these sections: Executive summary, Signal analysis (one subsection per metric with a 0-100 score), Competitive & market watch, Insights, Key risks, Recommended actions, Sources.`,
+    `## The Industry Analysis section (write this as a world-class strategy analyst)`,
+    `Immediately after the Executive summary, write a section titled "## Industry Analysis" that reads like a sell-side/strategy analyst note for a leadership team. It must be tight — no more than two pages. Structure it exactly as:`,
+    `- Open with an **Analyst's call**: one of Accelerate / Advance / Hold / Reposition / Retreat, plus a conviction level (low/moderate/high), then a one-line rationale.`,
+    `- A BLUF headline (1-2 sentences): the single most important thing leadership should understand about the industry right now and what it implies for this hypothesis.`,
+    `- **Landscape**: market structure, where the category sits in its lifecycle (forming / early-growth / consolidating / mature), and momentum. Ground in current news and data.`,
+    `- **Competitive dynamics**: concrete recent moves by the watchlist players and adjacent entrants (launches, funding, M&A, pricing, platform/roadmap signals) — who is gaining, who is exposed, and where the whitespace and moat are.`,
+    `- **Catalysts & signals to watch**: 2-4 recent or forward-looking events that move (or could move) the market.`,
+    `- **Implications for the hypothesis**: the "so what" — how this context strengthens or pressures the thesis, and the strategic option it points to.`,
+    `Be opinionated and evidence-based; every non-obvious claim gets an inline source link. The Analyst's call must be consistent with the PMF evidence.`,
+    ``,
+    `Write the full report in markdown with these sections in order: Executive summary, Industry Analysis, Signal analysis (one subsection per metric with a 0-100 score), Insights, Key risks, Recommended actions, Sources.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -214,6 +255,17 @@ export async function liveRun(
     };
   });
 
+  const ia = data.industryAnalysis;
+  const industryAnalysis = {
+    headline: ia.headline,
+    stance: STANCES.includes(ia.stance) ? ia.stance : "hold",
+    conviction: CONVICTIONS.includes(ia.conviction) ? ia.conviction : "moderate",
+    landscape: ia.landscape,
+    competitiveDynamics: ia.competitiveDynamics,
+    catalysts: Array.isArray(ia.catalysts) ? ia.catalysts.slice(0, 4) : [],
+    implications: ia.implications,
+  };
+
   return {
     result: {
       pmfScore: Math.max(0, Math.min(100, data.pmfScore)),
@@ -221,6 +273,7 @@ export async function liveRun(
       execSummary: data.execSummary,
       reportMd: `${reportMd}\n\n---\n\n*Report generated ${runDate.toISOString().slice(0, 10)} by live web research (${DEPTH_LABELS[hypcheck.depth]}).*\n`,
       metricScores,
+      industryAnalysis,
       insights: data.insights,
     },
     telemetry: {

@@ -1,5 +1,5 @@
-import type { BandKey } from "@/lib/types";
-import { scoreBand } from "@/lib/types";
+import type { AnalystStance, BandKey } from "@/lib/types";
+import { scoreBand, STANCE_LABELS } from "@/lib/types";
 
 export const BAND_COLORS: Record<BandKey, { text: string; bg: string; dot: string; stroke: string }> = {
   strong: { text: "text-emerald-700", bg: "bg-emerald-50", dot: "bg-emerald-500", stroke: "#059669" },
@@ -39,6 +39,25 @@ export function ModeBadge({ mode }: { mode: "simulated" | "live" }) {
   ) : (
     <span className="inline-flex items-center gap-1 rounded-full bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-faint ring-1 ring-inset ring-edge">
       Simulated
+    </span>
+  );
+}
+
+const STANCE_COLORS: Record<AnalystStance, { text: string; bg: string; dot: string }> = {
+  accelerate: { text: "text-emerald-700", bg: "bg-emerald-50", dot: "bg-emerald-500" },
+  advance: { text: "text-teal-700", bg: "bg-teal-50", dot: "bg-teal-500" },
+  hold: { text: "text-amber-700", bg: "bg-amber-50", dot: "bg-amber-500" },
+  reposition: { text: "text-orange-700", bg: "bg-orange-50", dot: "bg-orange-500" },
+  retreat: { text: "text-rose-700", bg: "bg-rose-50", dot: "bg-rose-500" },
+};
+
+export function StanceBadge({ stance, conviction }: { stance: AnalystStance; conviction?: string }) {
+  const c = STANCE_COLORS[stance];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-medium ${c.bg} ${c.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
+      Analyst’s call: {STANCE_LABELS[stance]}
+      {conviction && <span className="font-normal opacity-70">· {conviction} conviction</span>}
     </span>
   );
 }
