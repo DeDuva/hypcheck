@@ -15,7 +15,17 @@ CREATE TABLE IF NOT EXISTS hypchecks (
   depth TEXT NOT NULL DEFAULT 'standard',
   watchlist TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
-  next_run_at TEXT
+  next_run_at TEXT,
+  owner_id TEXT REFERENCES "user"(id)
+);
+CREATE TABLE IF NOT EXISTS hypcheck_access (
+  id TEXT PRIMARY KEY,
+  hypcheck_id TEXT NOT NULL REFERENCES hypchecks(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  granted_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(hypcheck_id, user_id)
 );
 CREATE TABLE IF NOT EXISTS hypothesis_versions (
   id TEXT PRIMARY KEY,
@@ -74,7 +84,8 @@ CREATE TABLE IF NOT EXISTS "user" (
   "emailVerified" INTEGER NOT NULL DEFAULT 0,
   "image" TEXT,
   "createdAt" DATE NOT NULL,
-  "updatedAt" DATE NOT NULL
+  "updatedAt" DATE NOT NULL,
+  "role" TEXT NOT NULL DEFAULT 'member'
 );
 CREATE TABLE IF NOT EXISTS "session" (
   "id" TEXT PRIMARY KEY,
@@ -114,6 +125,9 @@ CREATE INDEX IF NOT EXISTS idx_account_userId ON "account"("userId");
 CREATE INDEX IF NOT EXISTS idx_runs_hypcheck ON runs(hypcheck_id, run_at);
 CREATE INDEX IF NOT EXISTS idx_insights_hypcheck ON insights(hypcheck_id, status);
 CREATE INDEX IF NOT EXISTS idx_versions_hypcheck ON hypothesis_versions(hypcheck_id, version);
+CREATE INDEX IF NOT EXISTS idx_hypchecks_owner ON hypchecks(owner_id);
+CREATE INDEX IF NOT EXISTS idx_access_hypcheck ON hypcheck_access(hypcheck_id);
+CREATE INDEX IF NOT EXISTS idx_access_user ON hypcheck_access(user_id);
 `;
 
 /** Columns added after the initial schema shipped — applied to existing DBs. */
@@ -125,16 +139,30 @@ const MIGRATIONS: Record<string, Record<string, string>> = {
     searches: "INTEGER",
     industry_analysis: "TEXT",
   },
+  hypchecks: {
+    owner_id: "TEXT",
+  },
+  user: {
+    role: "TEXT NOT NULL DEFAULT 'member'",
+  },
 };
 
 async function migrate(client: Client): Promise<void> {
   for (const [table, columns] of Object.entries(MIGRATIONS)) {
-    const info = await client.execute(`PRAGMA table_info(${table})`);
+    const info = await client.execute(`PRAGMA table_info("${table}")`);
     const existing = new Set(info.rows.map((r) => (r as Record<string, unknown>).name as string));
     for (const [column, type] of Object.entries(columns)) {
       if (!existing.has(column)) {
-        await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+        await client.execute(`ALTER TABLE "${table}" ADD COLUMN ${column} ${type}`);
         logger.info("db.migrate.addColumn", { table, column, type });
+        // Phase 2 role rollout: the "role" column didn't exist before, so every
+        // pre-existing account predates per-hypcheck access control and had
+        // full access by construction — grandfather them all in as admin
+        // rather than silently locking them down to "member".
+        if (table === "user" && column === "role") {
+          await client.execute(`UPDATE "user" SET role = 'admin'`);
+          logger.info("db.migrate.backfillAdmin", {});
+        }
       }
     }
   }

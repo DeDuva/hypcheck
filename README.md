@@ -41,7 +41,20 @@ Production is **invite-only by construction**:
 
 Auth data (users, sessions) lives in the same libSQL/Turso database as everything else. The middleware redirect is a convenience; the actual enforcement is `requireUser()` in every page and server action (`src/lib/authz.ts`). `/api/health` returns a bare liveness ping unless the caller is signed in; `/api/cron` keeps its own `CRON_SECRET`.
 
-Per-hypcheck roles (admin / editor / creator / viewer) are the next phase — today every signed-in user has full access.
+### Roles and per-hypcheck access (phase 2)
+
+Every user has a global role — `admin`, `creator`, or `member` — plus, per hypcheck, an optional `editor`/`viewer` grant in `hypcheck_access`. Effective access (`src/lib/authz.ts#effectiveHypcheckRole`):
+
+- **admin** — full access to every hypcheck.
+- **owner** — the user who created the hypcheck (`hypchecks.owner_id`).
+- **editor** / **viewer** — an explicit grant in `hypcheck_access`.
+- Hypchecks created before phase 2 have no owner and are grandfathered as shared/editable, so existing data doesn't change behavior.
+
+Grant matrix: only an owner/admin can grant `editor`; an `editor` can grant `viewer`. `member`s cannot create hypchecks. The sharing UI (phase 3) isn't built yet — grants are made via `grantHypcheckAccessAction`/`revokeHypcheckAccessAction` (`src/lib/actions.ts`).
+
+New signups are bootstrapped as `admin` (ALLOWED_EMAILS is still the only invite gate, so this preserves today's full-access-for-everyone behavior); phase 3's admin console will introduce real differentiation.
+
+Enforcement ships in **shadow mode**: denials are logged (`authz.hypcheck.denied` / `authz.create.denied`) but not blocked unless `HYPCHECK_ENFORCE_ROLES=enforce` is set. Verify the logs show no unexpected denials before flipping it on.
 
 ## Deploy to Vercel
 

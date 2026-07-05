@@ -67,6 +67,14 @@ export const auth = betterAuth({
   // Cache the session in a signed cookie so most requests skip the DB
   // round-trip (matters on Turso, where every query crosses a region).
   session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
+  user: {
+    additionalFields: {
+      // Global role for phase-2 access control (src/lib/authz.ts). `input:
+      // false` keeps it out of the signup payload — only the hook below (or a
+      // future admin console) may set it.
+      role: { type: "string", required: false, defaultValue: "member", input: false },
+    },
+  },
   databaseHooks: {
     user: {
       create: {
@@ -78,7 +86,11 @@ export const auth = betterAuth({
             });
           }
           logger.info("auth.signup", { email: user.email });
-          return { data: user };
+          // Phase 2 bootstrap: ALLOWED_EMAILS is still the only invite gate
+          // (no admin console yet), so everyone who clears it starts as
+          // admin — same full access they'd have had pre-phase-2. Phase 3
+          // introduces real differentiation (invites, an admin console).
+          return { data: { ...user, role: "admin" } };
         },
       },
     },
