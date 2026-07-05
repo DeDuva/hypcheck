@@ -9,7 +9,7 @@ phases roll out. Production: https://hypcheck-xi.vercel.app (deploys from
 | Lane | Branch | URL | Database |
 |---|---|---|---|
 | Local | any | localhost:3000 | `data/hypcheck.db` (file) |
-| Staging | `staging` | stable branch alias `hypcheck-git-staging-<scope>.vercel.app` | `hypcheck-staging` (Turso) |
+| Staging | `staging` | https://hypcheck-git-staging-dovzimring-5491s-projects.vercel.app | `hypcheck-staging` (Turso) |
 | Production | `main` | hypcheck-xi.vercel.app | production Turso DB |
 
 Flow per change: feature branch → PR (auto preview deploy: build + review)
@@ -25,10 +25,15 @@ previews are for build/UI review; staging is where auth flows get exercised.
 1. **Turso**: create `hypcheck-staging`; optionally load a prod dump for
    realistic data (`turso db shell <prod> .dump | turso db shell hypcheck-staging`).
 2. **Google Cloud** ([credentials console](https://console.cloud.google.com/apis/credentials)):
-   one OAuth client with three authorized redirect URIs:
+   one OAuth client (type **Web application** — other types reject custom
+   URIs) with three authorized redirect URIs, added one per field with no
+   backticks or trailing spaces:
    - `https://hypcheck-xi.vercel.app/api/auth/callback/google`
-   - `https://hypcheck-git-staging-<scope>.vercel.app/api/auth/callback/google`
+   - `https://hypcheck-git-staging-dovzimring-5491s-projects.vercel.app/api/auth/callback/google`
    - `http://localhost:3000/api/auth/callback/google`
+
+   (Confirm the staging domain in Vercel — it's listed under the staging
+   deployment's Domains as the `hypcheck-git-staging-…` alias.)
 3. **Vercel → Settings → Environment Variables**, scoped to **Preview**:
    - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` → the staging database
    - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
