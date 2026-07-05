@@ -30,6 +30,8 @@ export type LiveTelemetry = Pick<RunTelemetry, "inputTokens" | "outputTokens" | 
 export interface LiveRunOutput {
   result: RunResult;
   telemetry: LiveTelemetry;
+  /** The instant the run was assessed — persist this so the report body's date matches `runAt`. */
+  runAt: Date;
 }
 
 function webSearchRequests(usage: Anthropic.Usage): number | null {
@@ -313,6 +315,7 @@ export async function liveRun(
       outputTokens: research.usage.output_tokens,
       searches,
     },
+    runAt: runDate,
   };
 }
 

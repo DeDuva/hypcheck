@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getHypcheck, getRun, listRuns } from "@/lib/store";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatTime, stripReportPreamble } from "@/lib/format";
 import { ModeBadge, ScoreChip, StanceBadge } from "@/components/ScoreChip";
 import { DeltaBadge } from "@/components/DeltaBadge";
 
@@ -41,7 +41,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               {prior && <DeltaBadge delta={run.pmfScore - prior.pmfScore} />}
             </div>
             <span className="text-[11.5px] text-ink-faint">
-              Hypothesis v{run.hypothesisVersion} · confidence {Math.round(run.confidence * 100)}%
+              Hypothesis v{run.hypothesisVersion} · confidence {Math.round(run.confidence * 100)}% · {formatTime(run.runAt)}
             </span>
           </div>
         </div>
@@ -76,7 +76,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       )}
 
       <article className="report-md mt-6 rounded-2xl border border-edge bg-surface px-7 py-8 shadow-card">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{run.reportMd}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripReportPreamble(run.reportMd)}</ReactMarkdown>
       </article>
     </div>
   );
