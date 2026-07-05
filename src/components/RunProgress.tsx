@@ -55,7 +55,10 @@ export function RunProgress({
       if (outcome === "ok") {
         setDone(true);
         // Brief beat so the bar visibly reaches 100%, then refresh in place.
-        setTimeout(() => !cancelled && router.refresh(), 500);
+        // Not gated on `cancelled`: onFinished() unmounts this component (which
+        // sets cancelled = true), but the refresh is a page navigation that must
+        // still fire — otherwise the graph never picks up the new run.
+        setTimeout(() => router.refresh(), 500);
       }
       onFinishedRef.current?.(outcome);
     });
