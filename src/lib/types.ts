@@ -63,6 +63,17 @@ export interface HypcheckAccessGrant {
   createdAt: string;
 }
 
+/** An email invited to a hypcheck before they've ever signed in — activated
+ * into a real HypcheckAccessGrant on that email's first login. */
+export interface HypcheckInvitation {
+  id: string;
+  hypcheckId: string;
+  email: string;
+  role: GrantRole;
+  invitedBy: string;
+  createdAt: string;
+}
+
 export interface HypothesisVersion {
   id: string;
   hypcheckId: string;

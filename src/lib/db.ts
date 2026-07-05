@@ -27,6 +27,15 @@ CREATE TABLE IF NOT EXISTS hypcheck_access (
   created_at TEXT NOT NULL,
   UNIQUE(hypcheck_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS hypcheck_invitations (
+  id TEXT PRIMARY KEY,
+  hypcheck_id TEXT NOT NULL REFERENCES hypchecks(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL,
+  invited_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(hypcheck_id, email)
+);
 CREATE TABLE IF NOT EXISTS hypothesis_versions (
   id TEXT PRIMARY KEY,
   hypcheck_id TEXT NOT NULL REFERENCES hypchecks(id) ON DELETE CASCADE,
@@ -127,6 +136,8 @@ CREATE INDEX IF NOT EXISTS idx_insights_hypcheck ON insights(hypcheck_id, status
 CREATE INDEX IF NOT EXISTS idx_versions_hypcheck ON hypothesis_versions(hypcheck_id, version);
 CREATE INDEX IF NOT EXISTS idx_access_hypcheck ON hypcheck_access(hypcheck_id);
 CREATE INDEX IF NOT EXISTS idx_access_user ON hypcheck_access(user_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_hypcheck ON hypcheck_invitations(hypcheck_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_email ON hypcheck_invitations(email);
 `;
 
 // Indexes on columns added via MIGRATIONS (below) rather than in the initial

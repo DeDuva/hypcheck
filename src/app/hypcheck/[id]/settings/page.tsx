@@ -1,17 +1,35 @@
 import Link from "next/link";
-import { deleteHypcheckAction, updateSettingsAction } from "@/lib/actions";
+import {
+  deleteHypcheckAction,
+  grantHypcheckAccessAction,
+  revokeHypcheckAccessAction,
+  revokeInvitationAction,
+  updateSettingsAction,
+} from "@/lib/actions";
 import { CADENCE_LABELS, DEPTH_LABELS, type Cadence, type Depth } from "@/lib/types";
 import { requireHypcheckAccess } from "@/lib/authz";
+import { getUserById, listAccessGrantsWithUsers, listInvitations } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 const CADENCES: Cadence[] = ["daily", "weekly", "biweekly", "monthly"];
 const DEPTHS: Depth[] = ["brief", "standard", "deep"];
 
-export default async function SettingsPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SettingsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ shareError?: string }>;
+}) {
   const { id } = await params;
+  const { shareError } = await searchParams;
   const { hypcheck, role } = await requireHypcheckAccess(id, "editor");
   const canDelete = role === "owner" || role === "admin";
+  const canGrantEditor = role === "owner" || role === "admin";
+  const grants = await listAccessGrantsWithUsers(id);
+  const invitations = await listInvitations(id);
+  const owner = hypcheck.ownerId ? await getUserById(hypcheck.ownerId) : null;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10 lg:px-8">
@@ -123,6 +141,107 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
           </button>
         </div>
       </form>
+
+      <div className="mt-5 rounded-2xl border border-edge bg-surface p-6 shadow-card">
+        <h2 className="text-[15px] font-semibold text-ink">Sharing</h2>
+        <p className="mt-1 text-[12.5px] text-ink-faint">
+          {owner ? (
+            <>
+              Owned by {owner.name} ({owner.email}).{" "}
+            </>
+          ) : (
+            "Owned by no one in particular — grandfathered in as shared. "
+          )}
+          Invite anyone by email — if they haven&apos;t signed in yet, access activates automatically the first time they do.
+        </p>
+
+        {(grants.length > 0 || invitations.length > 0) && (
+          <ul className="mt-4 divide-y divide-edge border-t border-edge">
+            {grants.map((grant) => (
+              <li key={grant.id} className="flex items-center justify-between py-2.5">
+                <div>
+                  <p className="text-[13px] font-medium text-ink">{grant.name}</p>
+                  <p className="text-[12px] text-ink-faint">{grant.email}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="rounded-full bg-paper px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-ink-soft ring-1 ring-inset ring-edge">
+                    {grant.role}
+                  </span>
+                  <form action={revokeHypcheckAccessAction.bind(null, id, grant.userId)}>
+                    <button
+                      type="submit"
+                      className="text-[12px] font-medium text-ink-faint transition-colors hover:text-rose-600"
+                    >
+                      Remove
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+            {invitations.map((invite) => (
+              <li key={invite.id} className="flex items-center justify-between py-2.5">
+                <div>
+                  <p className="text-[13px] font-medium text-ink">{invite.email}</p>
+                  <p className="text-[12px] text-ink-faint">Invited — activates on first sign-in</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-amber-700 ring-1 ring-inset ring-amber-200">
+                    {invite.role}
+                  </span>
+                  <form action={revokeInvitationAction.bind(null, id, invite.email)}>
+                    <button
+                      type="submit"
+                      className="text-[12px] font-medium text-ink-faint transition-colors hover:text-rose-600"
+                    >
+                      Cancel invite
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form action={grantHypcheckAccessAction.bind(null, id)} className="mt-4 flex items-end gap-2 border-t border-edge pt-4">
+          <div className="flex-1">
+            <label htmlFor="share-email" className="text-[12.5px] font-semibold text-ink">
+              Invite by email
+            </label>
+            <input
+              id="share-email"
+              name="email"
+              type="email"
+              required
+              placeholder="teammate@company.com"
+              className="mt-1.5 w-full rounded-lg border border-edge bg-paper/50 px-3 py-2 text-[13.5px] outline-none transition-colors focus:border-iris focus:bg-surface"
+            />
+          </div>
+          <div>
+            <label htmlFor="share-role" className="text-[12.5px] font-semibold text-ink">
+              Role
+            </label>
+            <select
+              id="share-role"
+              name="role"
+              defaultValue="viewer"
+              className="mt-1.5 rounded-lg border border-edge bg-paper/50 px-3 py-2 text-[13.5px] outline-none transition-colors focus:border-iris focus:bg-surface"
+            >
+              <option value="viewer">Viewer</option>
+              {canGrantEditor && <option value="editor">Editor</option>}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="rounded-lg bg-ink px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-ink/80"
+          >
+            Share
+          </button>
+        </form>
+
+        {shareError && (
+          <p className="mt-2.5 text-[12px] text-rose-600">{shareError}</p>
+        )}
+      </div>
 
       {canDelete && (
         <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50/40 p-5">
