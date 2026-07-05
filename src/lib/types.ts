@@ -5,6 +5,12 @@ export type InsightDirection = "supporting" | "challenging" | "watch";
 export type InsightStatus = "new" | "accepted" | "dismissed";
 export type VersionSource = "initial" | "insight" | "manual" | "ai";
 
+/** Global, account-level role — governs whether a user can create hypchecks
+ * and, for admins, grants implicit access to every hypcheck. */
+export type GlobalRole = "admin" | "creator" | "member";
+/** Per-hypcheck grant role from the `hypcheck_access` table. */
+export type GrantRole = "editor" | "viewer";
+
 // Analyst's call — the leadership-facing stance the industry analysis lands on.
 export type AnalystStance = "accelerate" | "advance" | "hold" | "reposition" | "retreat";
 export type Conviction = "low" | "moderate" | "high";
@@ -45,6 +51,16 @@ export interface Hypcheck {
   watchlist: string[]; // companies, products, competitive signals
   createdAt: string; // ISO
   nextRunAt: string | null; // ISO
+  ownerId: string | null; // null on hypchecks created before phase 2 (grandfathered, shared access)
+}
+
+export interface HypcheckAccessGrant {
+  id: string;
+  hypcheckId: string;
+  userId: string;
+  role: GrantRole;
+  grantedBy: string;
+  createdAt: string;
 }
 
 export interface HypothesisVersion {

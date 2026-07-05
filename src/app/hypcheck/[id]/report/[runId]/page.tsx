@@ -2,19 +2,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getHypcheck, getRun, listRuns } from "@/lib/store";
+import { getRun, listRuns } from "@/lib/store";
 import { formatDate, formatTime, stripReportPreamble } from "@/lib/format";
 import { ModeBadge, ScoreChip, StanceBadge } from "@/components/ScoreChip";
 import { DeltaBadge } from "@/components/DeltaBadge";
-import { requireUser } from "@/lib/authz";
+import { requireHypcheckAccess } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportPage({ params }: { params: Promise<{ id: string; runId: string }> }) {
-  await requireUser();
   const { id, runId } = await params;
-  const [hypcheck, run, runs] = await Promise.all([getHypcheck(id), getRun(runId), listRuns(id)]);
-  if (!hypcheck || !run || run.hypcheckId !== id) notFound();
+  const { hypcheck } = await requireHypcheckAccess(id, "viewer");
+  const [run, runs] = await Promise.all([getRun(runId), listRuns(id)]);
+  if (!run || run.hypcheckId !== id) notFound();
 
   const idx = runs.findIndex((r) => r.id === runId);
   const prior = idx > 0 ? runs[idx - 1] : null;

@@ -33,7 +33,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   await ensureSeeded();
-  const hypchecks = await listHypchecks();
+  const hypchecks = await listHypchecks(viewer);
   const withScores = await Promise.all(
     hypchecks.map(async (h) => ({ hypcheck: h, run: await latestRun(h.id) }))
   );
