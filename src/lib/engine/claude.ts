@@ -1,16 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Depth, Hypcheck, HypothesisVersion, Metric, RefineResult, RunResult, RunTelemetry } from "../types";
 import { DEPTH_LABELS } from "../types";
+import { buildReportMd } from "./report";
 import { Logger, logger as rootLogger } from "../logger";
 
 // Sonnet is the default research model: ~2-3x faster than Opus at web-grounded
 // synthesis, which keeps a run (incl. the industry-analysis section) well under
 // Vercel's 300s function ceiling. Override with HYPCHECK_MODEL for max depth.
 const MODEL = process.env.HYPCHECK_MODEL || "claude-sonnet-4-6";
-// The extraction pass only reformats the report into JSON — a fast model does
-// it well and shaves seconds off the run, which matters under a tight
-// (e.g. Vercel Hobby 60s) function budget.
-const EXTRACT_MODEL = process.env.HYPCHECK_EXTRACT_MODEL || "claude-haiku-4-5";
 
 const DEPTH_SEARCHES: Record<Depth, number> = { brief: 3, standard: 5, deep: 8 };
 const DEPTH_TOKENS: Record<Depth, number> = { brief: 6000, standard: 12000, deep: 24000 };
@@ -25,8 +22,8 @@ export function liveEngineAvailable(): boolean {
 }
 
 /** Non-secret engine config, for the health endpoint and logs. */
-export function engineInfo(): { model: string; extractModel: string; hasKey: boolean } {
-  return { model: MODEL, extractModel: EXTRACT_MODEL, hasKey: liveEngineAvailable() };
+export function engineInfo(): { model: string; hasKey: boolean } {
+  return { model: MODEL, hasKey: liveEngineAvailable() };
 }
 
 export type LiveTelemetry = Pick<RunTelemetry, "inputTokens" | "outputTokens" | "searches">;
@@ -117,8 +114,21 @@ const RESULT_SCHEMA = {
         additionalProperties: false,
       },
     },
+    sources: {
+      type: "array",
+      description: "Every web source cited anywhere in the report, as {title, url} pairs",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          url: { type: "string" },
+        },
+        required: ["title", "url"],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes"],
+  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes", "sources"],
   additionalProperties: false,
 } as const;
 
@@ -143,6 +153,7 @@ interface StructuredResult {
   risks: string[];
   actions: string[];
   watchlistNotes: Array<{ name: string; note: string }>;
+  sources: Array<{ title: string; url: string }>;
 }
 
 export type PhaseReporter = (phase: string, extra?: Record<string, unknown>) => void | Promise<void>;
@@ -159,7 +170,7 @@ export async function liveRun(
   const runDate = new Date();
 
   const researchPrompt = [
-    `You are a market researcher assessing product-market-fit evidence for a product hypothesis. Research the CURRENT state of the market using web search, then write a research report.`,
+    `You are a market researcher assessing product-market-fit evidence for a product hypothesis. Research the CURRENT state of the market using web search, then return your findings as a single structured research result.`,
     ``,
     `## Hypothesis under test (v${version.version})`,
     version.statement,
@@ -174,35 +185,42 @@ export async function liveRun(
     ``,
     `## Instructions`,
     `- Research depth: ${DEPTH_LABELS[hypcheck.depth]}. Run at most ${DEPTH_SEARCHES[hypcheck.depth]} web searches total for this entire report — budget them across the whole task, front-loading the searches you need to assess the metrics and the watchlist.`,
-    `- Ground every claim in what you find; cite the source inline as a markdown link.`,
-    `- Assess each metric, then derive an overall PMF score (0-100) as a weighted judgment.`,
-    `- Surface 1-3 insights. Mark each as supporting, challenging, or watch. If an insight genuinely warrants amending the hypothesis, include a complete proposed revision of the hypothesis statement.`,
-    `- End with key risks and recommended actions for the product manager.`,
+    `- Ground every claim in what you find. When a field draws on a source, cite it inline as a markdown link, and list every source you cite in the \`sources\` array.`,
+    `- \`execSummary\`: a 3-4 sentence executive summary of this period's findings, written for a product manager.`,
+    `- \`metricScores\`: assess each metric (use the exact metric names: ${metrics.map((m) => m.name).join(", ")}) with a 0-100 score and a 2-3 sentence evidence-based \`note\`. Then derive an overall \`pmfScore\` (0-100) as a weighted judgment, plus a \`confidence\` (0-1).`,
+    `- \`insights\`: surface 1-3 insights. Mark each as supporting, challenging, or watch. If an insight genuinely warrants amending the hypothesis, include a complete \`proposedRevision\` of the hypothesis statement; otherwise set it to null.`,
+    `- \`risks\` and \`actions\`: key risks and recommended actions for the product manager.`,
+    hypcheck.watchlist.length
+      ? `- \`watchlistNotes\`: one entry per watchlist name (exactly: ${hypcheck.watchlist.join(", ")}) noting any recent move relevant to the hypothesis.`
+      : `- \`watchlistNotes\`: leave as an empty array (no watchlist configured).`,
     ``,
-    `## The Industry Analysis section (write this as a world-class strategy analyst)`,
-    `Immediately after the Executive summary, write a section titled "## Industry Analysis" that reads like a sell-side/strategy analyst note for a leadership team. It must be tight — no more than two pages.`,
+    `## The industryAnalysis object (write this as a world-class strategy analyst)`,
+    `Fill in \`industryAnalysis\` as a sell-side/strategy analyst note for a leadership team. It must be tight — no more than two pages of prose across its fields.`,
     `IMPORTANT: do NOT run additional web searches specifically for this section. Synthesize it from the research and sources you already gathered for the signal analysis and watchlist above. This is analysis and judgment, not more searching.`,
-    `Structure it exactly as:`,
-    `- Open with an **Analyst's call**: one of Accelerate / Advance / Hold / Reposition / Retreat, plus a conviction level (low/moderate/high), then a one-line rationale.`,
-    `- A BLUF headline (1-2 sentences): the single most important thing leadership should understand about the industry right now and what it implies for this hypothesis.`,
-    `- **Landscape**: market structure, where the category sits in its lifecycle (forming / early-growth / consolidating / mature), and momentum.`,
-    `- **Competitive dynamics**: recent moves by the watchlist players and adjacent entrants — who is gaining, who is exposed, and where the whitespace and moat are.`,
-    `- **Catalysts & signals to watch**: 2-4 recent or forward-looking events that move (or could move) the market.`,
-    `- **Implications for the hypothesis**: the "so what" — how this context strengthens or pressures the thesis, and the strategic option it points to.`,
-    `Be opinionated and evidence-based, drawing on the sources already gathered. The Analyst's call must be consistent with the PMF evidence.`,
-    ``,
-    `Write the full report in markdown with these sections in order: Executive summary, Industry Analysis, Signal analysis (one subsection per metric with a 0-100 score), Insights, Key risks, Recommended actions, Sources.`,
+    `- \`stance\`: the analyst's call — one of accelerate / advance / hold / reposition / retreat — and \`conviction\` (low/moderate/high). It must be consistent with the PMF evidence.`,
+    `- \`headline\`: a BLUF (1-2 sentences): the single most important thing leadership should understand about the industry right now and what it implies for this hypothesis.`,
+    `- \`landscape\`: market structure, where the category sits in its lifecycle (forming / early-growth / consolidating / mature), and momentum.`,
+    `- \`competitiveDynamics\`: recent moves by the watchlist players and adjacent entrants — who is gaining, who is exposed, and where the whitespace and moat are.`,
+    `- \`catalysts\`: 2-4 recent or forward-looking events that move (or could move) the market.`,
+    `- \`implications\`: the "so what" — how this context strengthens or pressures the thesis, and the strategic option it points to.`,
+    `Be opinionated and evidence-based, drawing on the sources already gathered.`,
   ]
     .filter(Boolean)
     .join("\n");
 
   const researchStart = Date.now();
+  // Single pass: research with web search AND emit the structured run result
+  // directly (json_schema output), then render the human-facing markdown
+  // locally via buildReportMd. This removes the separate extraction call.
   const stream = anthropic.messages.stream(
     {
       model: MODEL,
       max_tokens: DEPTH_TOKENS[hypcheck.depth],
       thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
+      output_config: {
+        effort: "medium",
+        format: { type: "json_schema", schema: RESULT_SCHEMA as unknown as Record<string, unknown> },
+      },
       tools: [{ type: "web_search_20260209", name: "web_search", max_uses: DEPTH_SEARCHES[hypcheck.depth] }],
       messages: [{ role: "user", content: researchPrompt }],
     },
@@ -221,46 +239,14 @@ export async function liveRun(
     searches,
     stopReason: research.stop_reason,
   });
-  const reportMd = research.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
-  if (!reportMd.trim()) {
-    throw new Error(`Live research returned no report text (stop_reason: ${research.stop_reason})`);
-  }
 
-  // Second pass: distill the research report into the structured run result.
-  const extractStart = Date.now();
-  const structured = await anthropic.messages.create({
-    model: EXTRACT_MODEL,
-    max_tokens: 8000,
-    output_config: { format: { type: "json_schema", schema: RESULT_SCHEMA as unknown as Record<string, unknown> } },
-    messages: [
-      {
-        role: "user",
-        content: [
-          `Extract the structured run result from this PMF research report. Metric names must match exactly: ${metrics.map((m) => m.name).join(", ")}.`,
-          hypcheck.watchlist.length ? `Watchlist names must match exactly: ${hypcheck.watchlist.join(", ")}.` : ``,
-          ``,
-          reportMd,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      },
-    ],
-  });
-  log.info("engine.extract.done", {
-    ms: Date.now() - extractStart,
-    model: EXTRACT_MODEL,
-    inputTokens: structured.usage.input_tokens,
-    outputTokens: structured.usage.output_tokens,
-    stopReason: structured.stop_reason,
-  });
-
-  const jsonText = structured.content
+  const jsonText = research.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("");
+  if (!jsonText.trim()) {
+    throw new Error(`Live research returned no structured result (stop_reason: ${research.stop_reason})`);
+  }
   const data = JSON.parse(jsonText) as StructuredResult;
 
   const metricByName = new Map(metrics.map((m) => [m.name.toLowerCase(), m]));
@@ -285,19 +271,46 @@ export async function liveRun(
     implications: ia.implications,
   };
 
+  const pmfScore = Math.max(0, Math.min(100, data.pmfScore));
+  const confidence = Math.max(0, Math.min(1, data.confidence));
+  const watchlistNotes: Record<string, string> = {};
+  for (const w of data.watchlistNotes ?? []) watchlistNotes[w.name] = w.note;
+
+  // Render the markdown report locally from the structured result, reusing the
+  // same builder the simulated engine uses.
+  const reportBody = buildReportMd({
+    name: hypcheck.name,
+    statement: version.statement,
+    version: version.version,
+    runDate,
+    mode: "live",
+    depth: hypcheck.depth,
+    pmfScore,
+    confidence,
+    execSummary: data.execSummary,
+    industryAnalysis,
+    metricScores,
+    watchlist: hypcheck.watchlist,
+    watchlistNotes,
+    insights: data.insights,
+    risks: data.risks,
+    actions: data.actions,
+    sources: Array.isArray(data.sources) ? data.sources : [],
+  });
+
   return {
     result: {
-      pmfScore: Math.max(0, Math.min(100, data.pmfScore)),
-      confidence: Math.max(0, Math.min(1, data.confidence)),
+      pmfScore,
+      confidence,
       execSummary: data.execSummary,
-      reportMd: `${reportMd}\n\n---\n\n*Report generated ${runDate.toISOString().slice(0, 10)} by live web research (${DEPTH_LABELS[hypcheck.depth]}).*\n`,
+      reportMd: `${reportBody}\n---\n\n*Report generated ${runDate.toISOString().slice(0, 10)} by live web research (${DEPTH_LABELS[hypcheck.depth]}).*\n`,
       metricScores,
       industryAnalysis,
       insights: data.insights,
     },
     telemetry: {
-      inputTokens: research.usage.input_tokens + structured.usage.input_tokens,
-      outputTokens: research.usage.output_tokens + structured.usage.output_tokens,
+      inputTokens: research.usage.input_tokens,
+      outputTokens: research.usage.output_tokens,
       searches,
     },
   };

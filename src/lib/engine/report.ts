@@ -18,6 +18,7 @@ export interface ReportInput {
   insights: Array<{ title: string; body: string; direction: InsightDirection; proposedRevision: string | null }>;
   risks: string[];
   actions: string[];
+  sources?: Array<{ title: string; url: string }>;
 }
 
 const DIRECTION_LABEL: Record<InsightDirection, string> = {
@@ -122,6 +123,12 @@ export function buildReportMd(r: ReportInput): string {
     lines.push(`## Recommended actions`);
     lines.push("");
     for (const a of r.actions) lines.push(`- ${a}`);
+    lines.push("");
+  }
+  if (r.sources && r.sources.length) {
+    lines.push(`## Sources`);
+    lines.push("");
+    for (const s of r.sources) lines.push(`- [${s.title}](${s.url})`);
     lines.push("");
   }
   lines.push(`## Methodology`);
