@@ -7,11 +7,13 @@ import { executeRun, refineHypothesis } from "./engine";
 import {
   addVersion,
   createHypcheck,
+  createInvitation,
   deleteHypcheck,
   getInsight,
   getUserByEmail,
   grantAccess,
   revokeAccess,
+  revokeInvitation,
   setInsightStatus,
   setLastRunAttempt,
   updateHypcheckSettings,
@@ -156,22 +158,37 @@ export async function deleteHypcheckAction(hypcheckId: string): Promise<void> {
 
 /**
  * Share access to a hypcheck. Matrix: only an owner/admin may grant editor
- * access; an editor may only extend viewer access. UI for this lands in
- * phase 3 — for now it's callable directly (e.g. from a console or script).
+ * access; an editor may only extend viewer access. Failures redirect back to
+ * the settings page with `?shareError=` instead of throwing, since this runs
+ * as a plain form action with no client-side error boundary. If the email
+ * hasn't signed in yet, this creates a pending invitation instead — it's
+ * activated into a real grant on that email's first login (see auth.ts).
  */
 export async function grantHypcheckAccessAction(hypcheckId: string, formData: FormData): Promise<void> {
   const { viewer, role } = await requireHypcheckAccess(hypcheckId, "editor");
   const log = actionLogger("grantAccess", { userId: viewer.id, hypcheckId });
+  const settingsPath = `/hypcheck/${hypcheckId}/settings`;
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const grantRole: GrantRole = String(formData.get("role") ?? "viewer") === "editor" ? "editor" : "viewer";
+
+  if (!email) redirect(`${settingsPath}?shareError=${encodeURIComponent("Enter an email address to share with")}`);
   if (grantRole === "editor" && role !== "admin" && role !== "owner") {
-    throw new Error("Only the owner or an admin can grant editor access");
+    redirect(`${settingsPath}?shareError=${encodeURIComponent("Only the owner or an admin can grant editor access")}`);
+  }
+  if (email === viewer.email) {
+    redirect(`${settingsPath}?shareError=${encodeURIComponent("You already have access")}`);
   }
   const target = await getUserByEmail(email);
-  if (!target) throw new Error("No user with that email has signed in yet");
+  if (!target) {
+    await createInvitation(hypcheckId, email, grantRole, viewer.id);
+    log.info("hypcheck.invitation.created", { hypcheckId, email, role: grantRole });
+    revalidatePath(settingsPath);
+    redirect(settingsPath);
+  }
   await grantAccess(hypcheckId, target.id, grantRole, viewer.id);
   log.info("hypcheck.access.granted", { hypcheckId, targetUserId: target.id, role: grantRole });
-  revalidatePath(`/hypcheck/${hypcheckId}/settings`);
+  revalidatePath(settingsPath);
+  redirect(settingsPath);
 }
 
 export async function revokeHypcheckAccessAction(hypcheckId: string, userId: string): Promise<void> {
@@ -179,5 +196,13 @@ export async function revokeHypcheckAccessAction(hypcheckId: string, userId: str
   const log = actionLogger("revokeAccess", { userId: viewer.id, hypcheckId });
   await revokeAccess(hypcheckId, userId);
   log.info("hypcheck.access.revoked", { hypcheckId, targetUserId: userId });
+  revalidatePath(`/hypcheck/${hypcheckId}/settings`);
+}
+
+export async function revokeInvitationAction(hypcheckId: string, email: string): Promise<void> {
+  const { viewer } = await requireHypcheckAccess(hypcheckId, "editor");
+  const log = actionLogger("revokeInvitation", { userId: viewer.id, hypcheckId });
+  await revokeInvitation(hypcheckId, email);
+  log.info("hypcheck.invitation.revoked", { hypcheckId, email });
   revalidatePath(`/hypcheck/${hypcheckId}/settings`);
 }

@@ -5,6 +5,7 @@ import type {
   GrantRole,
   Hypcheck,
   HypcheckAccessGrant,
+  HypcheckInvitation,
   HypothesisVersion,
   Insight,
   InsightDirection,
@@ -40,6 +41,17 @@ function rowToGrant(r: Row): HypcheckAccessGrant {
     userId: r.user_id as string,
     role: r.role as GrantRole,
     grantedBy: r.granted_by as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+function rowToInvitation(r: Row): HypcheckInvitation {
+  return {
+    id: r.id as string,
+    hypcheckId: r.hypcheck_id as string,
+    email: r.email as string,
+    role: r.role as GrantRole,
+    invitedBy: r.invited_by as string,
     createdAt: r.created_at as string,
   };
 }
@@ -263,6 +275,89 @@ export async function getUserByEmail(email: string): Promise<{ id: string; email
   const res = await db.execute({ sql: `SELECT id, email, name FROM "user" WHERE email = ?`, args: [email] });
   const row = res.rows[0] as Row | undefined;
   return row ? { id: row.id as string, email: row.email as string, name: row.name as string } : null;
+}
+
+export async function getUserById(userId: string): Promise<{ id: string; email: string; name: string } | null> {
+  const db = await getDb();
+  const res = await db.execute({ sql: `SELECT id, email, name FROM "user" WHERE id = ?`, args: [userId] });
+  const row = res.rows[0] as Row | undefined;
+  return row ? { id: row.id as string, email: row.email as string, name: row.name as string } : null;
+}
+
+export interface HypcheckAccessGrantWithUser extends HypcheckAccessGrant {
+  email: string;
+  name: string;
+}
+
+/** Grants joined with the grantee's identity, for rendering the sharing list. */
+export async function listAccessGrantsWithUsers(hypcheckId: string): Promise<HypcheckAccessGrantWithUser[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: `SELECT ha.*, u.email AS grantee_email, u.name AS grantee_name
+          FROM hypcheck_access ha
+          JOIN "user" u ON u.id = ha.user_id
+          WHERE ha.hypcheck_id = ?
+          ORDER BY ha.created_at ASC`,
+    args: [hypcheckId],
+  });
+  return res.rows.map((r) => {
+    const row = r as Row;
+    return { ...rowToGrant(row), email: row.grantee_email as string, name: row.grantee_name as string };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Invitations (hypcheck_invitations) — access granted to an email before that
+// person has ever signed in. Activated into a real hypcheck_access grant on
+// their first login (see the user.create.after hook in auth.ts).
+// ---------------------------------------------------------------------------
+
+export async function createInvitation(
+  hypcheckId: string,
+  email: string,
+  role: GrantRole,
+  invitedBy: string
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO hypcheck_invitations (id, hypcheck_id, email, role, invited_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(hypcheck_id, email) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by`,
+    args: [newId(), hypcheckId, email, role, invitedBy, new Date().toISOString()],
+  });
+}
+
+export async function listInvitations(hypcheckId: string): Promise<HypcheckInvitation[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT * FROM hypcheck_invitations WHERE hypcheck_id = ? ORDER BY created_at ASC",
+    args: [hypcheckId],
+  });
+  return res.rows.map((r) => rowToInvitation(r as Row));
+}
+
+export async function revokeInvitation(hypcheckId: string, email: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: "DELETE FROM hypcheck_invitations WHERE hypcheck_id = ? AND email = ?",
+    args: [hypcheckId, email],
+  });
+}
+
+/** Convert every pending invitation for `email` into a real access grant for
+ * the newly-created `userId`, then clear those invitations. Idempotent. */
+export async function activatePendingInvitations(userId: string, email: string): Promise<number> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT * FROM hypcheck_invitations WHERE email = ?",
+    args: [email],
+  });
+  const invitations = res.rows.map((r) => rowToInvitation(r as Row));
+  for (const invite of invitations) {
+    await grantAccess(invite.hypcheckId, userId, invite.role, invite.invitedBy);
+  }
+  await db.execute({ sql: "DELETE FROM hypcheck_invitations WHERE email = ?", args: [email] });
+  return invitations.length;
 }
 
 // ---------------------------------------------------------------------------

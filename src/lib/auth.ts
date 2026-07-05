@@ -4,6 +4,7 @@ import { LibsqlDialect } from "@libsql/kysely-libsql";
 import fs from "node:fs";
 import path from "node:path";
 import { logger } from "./logger";
+import { activatePendingInvitations } from "./store";
 
 /**
  * Auth posture:
@@ -91,6 +92,10 @@ export const auth = betterAuth({
           // admin — same full access they'd have had pre-phase-2. Phase 3
           // introduces real differentiation (invites, an admin console).
           return { data: { ...user, role: "admin" } };
+        },
+        after: async (user) => {
+          const activated = await activatePendingInvitations(user.id, user.email.trim().toLowerCase());
+          if (activated > 0) logger.info("auth.invitations.activated", { email: user.email, count: activated });
         },
       },
     },
