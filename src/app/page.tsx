@@ -10,8 +10,8 @@ import { DeltaBadge } from "@/components/DeltaBadge";
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
-  await requireUser();
-  const hypchecks = await listHypchecks();
+  const viewer = await requireUser();
+  const hypchecks = await listHypchecks(viewer);
   const cards = await Promise.all(
     hypchecks.map(async (h) => {
       const runs = await listRuns(h.id);

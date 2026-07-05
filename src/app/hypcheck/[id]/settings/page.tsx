@@ -1,9 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getHypcheck } from "@/lib/store";
 import { deleteHypcheckAction, updateSettingsAction } from "@/lib/actions";
 import { CADENCE_LABELS, DEPTH_LABELS, type Cadence, type Depth } from "@/lib/types";
-import { requireUser } from "@/lib/authz";
+import { requireHypcheckAccess } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +9,9 @@ const CADENCES: Cadence[] = ["daily", "weekly", "biweekly", "monthly"];
 const DEPTHS: Depth[] = ["brief", "standard", "deep"];
 
 export default async function SettingsPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
   const { id } = await params;
-  const hypcheck = await getHypcheck(id);
-  if (!hypcheck) notFound();
+  const { hypcheck, role } = await requireHypcheckAccess(id, "editor");
+  const canDelete = role === "owner" || role === "admin";
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10 lg:px-8">
@@ -127,20 +124,22 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
         </div>
       </form>
 
-      <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50/40 p-5">
-        <h2 className="text-[13.5px] font-semibold text-rose-800">Danger zone</h2>
-        <p className="mt-1 text-[12.5px] text-rose-700/80">
-          Deletes this hypcheck with its full run history, reports, and insights. This cannot be undone.
-        </p>
-        <form action={deleteHypcheckAction.bind(null, id)} className="mt-3">
-          <button
-            type="submit"
-            className="rounded-lg bg-surface px-3.5 py-2 text-[12.5px] font-medium text-rose-700 ring-1 ring-inset ring-rose-200 transition-colors hover:bg-rose-50"
-          >
-            Delete hypcheck
-          </button>
-        </form>
-      </div>
+      {canDelete && (
+        <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50/40 p-5">
+          <h2 className="text-[13.5px] font-semibold text-rose-800">Danger zone</h2>
+          <p className="mt-1 text-[12.5px] text-rose-700/80">
+            Deletes this hypcheck with its full run history, reports, and insights. This cannot be undone.
+          </p>
+          <form action={deleteHypcheckAction.bind(null, id)} className="mt-3">
+            <button
+              type="submit"
+              className="rounded-lg bg-surface px-3.5 py-2 text-[12.5px] font-medium text-rose-700 ring-1 ring-inset ring-rose-200 transition-colors hover:bg-rose-50"
+            >
+              Delete hypcheck
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

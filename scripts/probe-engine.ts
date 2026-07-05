@@ -31,6 +31,7 @@ async function main() {
     watchlist: ["Otter.ai", "Fathom", "Granola"],
     createdAt: new Date().toISOString(),
     nextRunAt: null,
+    ownerId: null,
   };
 
   const version: HypothesisVersion = {

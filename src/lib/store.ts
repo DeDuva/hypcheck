@@ -2,7 +2,9 @@ import { getDb, newId } from "./db";
 import type {
   Cadence,
   Depth,
+  GrantRole,
   Hypcheck,
+  HypcheckAccessGrant,
   HypothesisVersion,
   Insight,
   InsightDirection,
@@ -27,6 +29,18 @@ function rowToHypcheck(r: Row): Hypcheck {
     watchlist: JSON.parse((r.watchlist as string) || "[]"),
     createdAt: r.created_at as string,
     nextRunAt: (r.next_run_at as string) ?? null,
+    ownerId: (r.owner_id as string) ?? null,
+  };
+}
+
+function rowToGrant(r: Row): HypcheckAccessGrant {
+  return {
+    id: r.id as string,
+    hypcheckId: r.hypcheck_id as string,
+    userId: r.user_id as string,
+    role: r.role as GrantRole,
+    grantedBy: r.granted_by as string,
+    createdAt: r.created_at as string,
   };
 }
 
@@ -93,9 +107,25 @@ function rowToInsight(r: Row): Insight {
 // Hypchecks
 // ---------------------------------------------------------------------------
 
-export async function listHypchecks(): Promise<Hypcheck[]> {
+/**
+ * Data-scoped listing: admins see everything, everyone else sees hypchecks
+ * they own, are explicitly granted access to, or that predate ownership
+ * (owner_id IS NULL — grandfathered shared hypchecks, see effectiveHypcheckRole).
+ */
+export async function listHypchecks(viewer: { id: string; role: string }): Promise<Hypcheck[]> {
   const db = await getDb();
-  const res = await db.execute("SELECT * FROM hypchecks ORDER BY created_at DESC");
+  if (viewer.role === "admin") {
+    const res = await db.execute("SELECT * FROM hypchecks ORDER BY created_at DESC");
+    return res.rows.map((r) => rowToHypcheck(r as Row));
+  }
+  const res = await db.execute({
+    sql: `SELECT h.* FROM hypchecks h
+          WHERE h.owner_id IS NULL
+             OR h.owner_id = ?
+             OR EXISTS (SELECT 1 FROM hypcheck_access a WHERE a.hypcheck_id = h.id AND a.user_id = ?)
+          ORDER BY h.created_at DESC`,
+    args: [viewer.id, viewer.id],
+  });
   return res.rows.map((r) => rowToHypcheck(r as Row));
 }
 
@@ -114,14 +144,14 @@ export interface CreateHypcheckInput {
   metrics: Array<{ name: string; description: string; weight: number }>;
 }
 
-export async function createHypcheck(input: CreateHypcheckInput): Promise<Hypcheck> {
+export async function createHypcheck(input: CreateHypcheckInput, ownerId: string): Promise<Hypcheck> {
   const db = await getDb();
   const id = newId();
   const now = new Date().toISOString();
   await db.execute({
-    sql: `INSERT INTO hypchecks (id, name, status, cadence, depth, watchlist, created_at, next_run_at)
-          VALUES (?, ?, 'active', ?, ?, ?, ?, ?)`,
-    args: [id, input.name, input.cadence, input.depth, JSON.stringify(input.watchlist), now, now],
+    sql: `INSERT INTO hypchecks (id, name, status, cadence, depth, watchlist, created_at, next_run_at, owner_id)
+          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
+    args: [id, input.name, input.cadence, input.depth, JSON.stringify(input.watchlist), now, now, ownerId],
   });
   await db.execute({
     sql: `INSERT INTO hypothesis_versions (id, hypcheck_id, version, statement, change_summary, source, created_at)
@@ -181,6 +211,58 @@ export async function listDueHypchecks(now: Date = new Date()): Promise<Hypcheck
     args: [now.toISOString()],
   });
   return res.rows.map((r) => rowToHypcheck(r as Row));
+}
+
+// ---------------------------------------------------------------------------
+// Access grants (hypcheck_access) — per-hypcheck editor/viewer sharing.
+// ---------------------------------------------------------------------------
+
+export async function getAccessGrant(hypcheckId: string, userId: string): Promise<HypcheckAccessGrant | null> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT * FROM hypcheck_access WHERE hypcheck_id = ? AND user_id = ?",
+    args: [hypcheckId, userId],
+  });
+  return res.rows[0] ? rowToGrant(res.rows[0] as Row) : null;
+}
+
+export async function listAccessGrants(hypcheckId: string): Promise<HypcheckAccessGrant[]> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT * FROM hypcheck_access WHERE hypcheck_id = ? ORDER BY created_at ASC",
+    args: [hypcheckId],
+  });
+  return res.rows.map((r) => rowToGrant(r as Row));
+}
+
+export async function grantAccess(
+  hypcheckId: string,
+  userId: string,
+  role: GrantRole,
+  grantedBy: string
+): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO hypcheck_access (id, hypcheck_id, user_id, role, granted_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(hypcheck_id, user_id) DO UPDATE SET role = excluded.role, granted_by = excluded.granted_by`,
+    args: [newId(), hypcheckId, userId, role, grantedBy, new Date().toISOString()],
+  });
+}
+
+export async function revokeAccess(hypcheckId: string, userId: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: "DELETE FROM hypcheck_access WHERE hypcheck_id = ? AND user_id = ?",
+    args: [hypcheckId, userId],
+  });
+}
+
+export async function getUserByEmail(email: string): Promise<{ id: string; email: string; name: string } | null> {
+  const db = await getDb();
+  const res = await db.execute({ sql: `SELECT id, email, name FROM "user" WHERE email = ?`, args: [email] });
+  const row = res.rows[0] as Row | undefined;
+  return row ? { id: row.id as string, email: row.email as string, name: row.name as string } : null;
 }
 
 // ---------------------------------------------------------------------------

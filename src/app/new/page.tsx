@@ -1,8 +1,8 @@
 import { Wizard } from "@/components/Wizard";
-import { requireUser } from "@/lib/authz";
+import { requireCanCreateHypcheck } from "@/lib/authz";
 
 export default async function NewHypcheckPage() {
-  await requireUser();
+  await requireCanCreateHypcheck();
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 lg:px-8">
       <h1 className="text-[22px] font-semibold tracking-tight">New hypcheck</h1>
