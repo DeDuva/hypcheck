@@ -125,10 +125,15 @@ CREATE INDEX IF NOT EXISTS idx_account_userId ON "account"("userId");
 CREATE INDEX IF NOT EXISTS idx_runs_hypcheck ON runs(hypcheck_id, run_at);
 CREATE INDEX IF NOT EXISTS idx_insights_hypcheck ON insights(hypcheck_id, status);
 CREATE INDEX IF NOT EXISTS idx_versions_hypcheck ON hypothesis_versions(hypcheck_id, version);
-CREATE INDEX IF NOT EXISTS idx_hypchecks_owner ON hypchecks(owner_id);
 CREATE INDEX IF NOT EXISTS idx_access_hypcheck ON hypcheck_access(hypcheck_id);
 CREATE INDEX IF NOT EXISTS idx_access_user ON hypcheck_access(user_id);
 `;
+
+// Indexes on columns added via MIGRATIONS (below) rather than in the initial
+// CREATE TABLE — run these AFTER migrate() so the column is guaranteed to
+// exist. Bundling them into SCHEMA would break on any pre-existing DB, since
+// the batch runs before migrate() adds the column.
+const POST_MIGRATION_INDEXES = `CREATE INDEX IF NOT EXISTS idx_hypchecks_owner ON hypchecks(owner_id);`;
 
 /** Columns added after the initial schema shipped — applied to existing DBs. */
 const MIGRATIONS: Record<string, Record<string, string>> = {
@@ -214,6 +219,7 @@ async function init(): Promise<Client> {
       .filter(Boolean);
     await client.batch(schemaStatements, "write");
     await migrate(client);
+    await client.execute(POST_MIGRATION_INDEXES);
     instrument(client);
     logger.info("db.init", { backend, ms: Date.now() - start, statements: schemaStatements.length });
     return client;
