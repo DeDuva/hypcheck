@@ -8,10 +8,6 @@ import { Logger, logger as rootLogger } from "../logger";
 // synthesis, which keeps a run (incl. the industry-analysis section) well under
 // Vercel's 300s function ceiling. Override with HYPCHECK_MODEL for max depth.
 const MODEL = process.env.HYPCHECK_MODEL || "claude-sonnet-4-6";
-// The extraction pass only reformats the report into JSON — a fast model does
-// it well and shaves seconds off the run, which matters under a tight
-// (e.g. Vercel Hobby 60s) function budget.
-const EXTRACT_MODEL = process.env.HYPCHECK_EXTRACT_MODEL || "claude-haiku-4-5";
 
 const DEPTH_SEARCHES: Record<Depth, number> = { brief: 3, standard: 5, deep: 8 };
 const DEPTH_TOKENS: Record<Depth, number> = { brief: 6000, standard: 12000, deep: 24000 };
@@ -26,8 +22,8 @@ export function liveEngineAvailable(): boolean {
 }
 
 /** Non-secret engine config, for the health endpoint and logs. */
-export function engineInfo(): { model: string; extractModel: string; hasKey: boolean } {
-  return { model: MODEL, extractModel: EXTRACT_MODEL, hasKey: liveEngineAvailable() };
+export function engineInfo(): { model: string; hasKey: boolean } {
+  return { model: MODEL, hasKey: liveEngineAvailable() };
 }
 
 export type LiveTelemetry = Pick<RunTelemetry, "inputTokens" | "outputTokens" | "searches">;
