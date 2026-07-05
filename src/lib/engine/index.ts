@@ -69,8 +69,10 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
               phase,
               researchMs: typeof extra.researchMs === "number" ? extra.researchMs : undefined,
             });
-          const { result, telemetry } = await liveRun(hypcheck, version, metrics, priorContext, log, onPhase);
-          run = await recordRun(hypcheck.id, version, "live", result, new Date(), {
+          const { result, telemetry, runAt } = await liveRun(hypcheck, version, metrics, priorContext, log, onPhase);
+          // Persist the same instant the report was rendered against, so the
+          // report body's date can never drift from the run's `runAt`.
+          run = await recordRun(hypcheck.id, version, "live", result, runAt, {
             durationMs: Date.now() - start,
             ...telemetry,
           });
@@ -79,14 +81,16 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
           // leave a scheduled run silently missing from the timeline.
           fellBack = true;
           log.warn("engine.live.fallback", { err: serializeError(err) });
-          const result = simulateRun(hypcheck, version, metrics, new Date(), prior?.pmfScore ?? null);
-          run = await recordRun(hypcheck.id, version, "simulated", result, new Date(), {
+          const runAt = new Date();
+          const result = simulateRun(hypcheck, version, metrics, runAt, prior?.pmfScore ?? null);
+          run = await recordRun(hypcheck.id, version, "simulated", result, runAt, {
             durationMs: Date.now() - start,
           });
         }
       } else {
-        const result = simulateRun(hypcheck, version, metrics, new Date(), prior?.pmfScore ?? null);
-        run = await recordRun(hypcheck.id, version, "simulated", result, new Date(), {
+        const runAt = new Date();
+        const result = simulateRun(hypcheck, version, metrics, runAt, prior?.pmfScore ?? null);
+        run = await recordRun(hypcheck.id, version, "simulated", result, runAt, {
           durationMs: Date.now() - start,
         });
       }
