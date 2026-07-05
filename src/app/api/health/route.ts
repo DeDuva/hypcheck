@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDbStats, getLastRunAttempt, probeWrite, type RunAttempt } from "@/lib/store";
 import { engineInfo } from "@/lib/engine";
+import { getViewer } from "@/lib/authz";
 import { logger, newRequestId, serializeError } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,14 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   const log = logger.child({ route: "health", reqId: newRequestId() });
+
+  // Unauthenticated callers get a bare liveness ping only — the detailed body
+  // (row counts, engine mode, run telemetry) is internal.
+  const viewer = await getViewer();
+  if (!viewer) {
+    return NextResponse.json({ ok: true, time: new Date().toISOString() });
+  }
+
   const engine = engineInfo();
   const backend = process.env.TURSO_DATABASE_URL ? "turso" : "file";
   // Opt-in write probe (?write=1) — reads can succeed while writes fail.

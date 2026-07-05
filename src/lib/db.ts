@@ -67,6 +67,50 @@ CREATE TABLE IF NOT EXISTS app_meta (
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS "user" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "email" TEXT NOT NULL UNIQUE,
+  "emailVerified" INTEGER NOT NULL DEFAULT 0,
+  "image" TEXT,
+  "createdAt" DATE NOT NULL,
+  "updatedAt" DATE NOT NULL
+);
+CREATE TABLE IF NOT EXISTS "session" (
+  "id" TEXT PRIMARY KEY,
+  "expiresAt" DATE NOT NULL,
+  "token" TEXT NOT NULL UNIQUE,
+  "createdAt" DATE NOT NULL,
+  "updatedAt" DATE NOT NULL,
+  "ipAddress" TEXT,
+  "userAgent" TEXT,
+  "userId" TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS "account" (
+  "id" TEXT PRIMARY KEY,
+  "accountId" TEXT NOT NULL,
+  "providerId" TEXT NOT NULL,
+  "userId" TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+  "accessToken" TEXT,
+  "refreshToken" TEXT,
+  "idToken" TEXT,
+  "accessTokenExpiresAt" DATE,
+  "refreshTokenExpiresAt" DATE,
+  "scope" TEXT,
+  "password" TEXT,
+  "createdAt" DATE NOT NULL,
+  "updatedAt" DATE NOT NULL
+);
+CREATE TABLE IF NOT EXISTS "verification" (
+  "id" TEXT PRIMARY KEY,
+  "identifier" TEXT NOT NULL,
+  "value" TEXT NOT NULL,
+  "expiresAt" DATE NOT NULL,
+  "createdAt" DATE,
+  "updatedAt" DATE
+);
+CREATE INDEX IF NOT EXISTS idx_session_userId ON "session"("userId");
+CREATE INDEX IF NOT EXISTS idx_account_userId ON "account"("userId");
 CREATE INDEX IF NOT EXISTS idx_runs_hypcheck ON runs(hypcheck_id, run_at);
 CREATE INDEX IF NOT EXISTS idx_insights_hypcheck ON insights(hypcheck_id, status);
 CREATE INDEX IF NOT EXISTS idx_versions_hypcheck ON hypothesis_versions(hypcheck_id, version);
