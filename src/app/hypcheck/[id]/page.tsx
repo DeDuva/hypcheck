@@ -11,6 +11,7 @@ import { RunNowButton } from "@/components/RunNowButton";
 import { FirstRunTrigger } from "@/components/FirstRunTrigger";
 import { DiffView } from "@/components/DiffView";
 import { reviseHypothesisAction } from "@/lib/actions";
+import { requireUser } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 // This route hosts runNowAction, whose after() callback runs the (long) live
@@ -19,6 +20,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 800;
 
 export default async function HypcheckOverview({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser();
   const { id } = await params;
   const hypcheck = await getHypcheck(id);
   if (!hypcheck) notFound();

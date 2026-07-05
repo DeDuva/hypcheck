@@ -6,6 +6,9 @@ import { ensureSeeded } from "@/lib/seed";
 import { latestRun, listHypchecks } from "@/lib/store";
 import { scoreBand } from "@/lib/types";
 import { BandDot } from "@/components/ScoreChip";
+import { UserMenu } from "@/components/UserMenu";
+import { getViewer } from "@/lib/authz";
+import { devOpenMode } from "@/lib/auth";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -17,6 +20,18 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Unauthenticated requests (the sign-in page) get a bare shell — the
+  // sidebar below fetches and displays hypcheck names, which must not render
+  // for anonymous visitors.
+  const viewer = await getViewer();
+  if (!viewer) {
+    return (
+      <html lang="en">
+        <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>{children}</body>
+      </html>
+    );
+  }
+
   await ensureSeeded();
   const hypchecks = await listHypchecks();
   const withScores = await Promise.all(
@@ -86,6 +101,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <>Demo mode — simulated runs. Set <code className="font-mono">ANTHROPIC_API_KEY</code> for live research.</>
                 )}
               </p>
+            </div>
+
+            <div className="border-t border-edge px-4 py-3">
+              {devOpenMode ? (
+                <p className="text-[11.5px] leading-relaxed text-ink-faint">
+                  Local dev — sign-in off. Set <code className="font-mono">GOOGLE_CLIENT_ID</code> to enable auth.
+                </p>
+              ) : (
+                <UserMenu viewer={viewer} />
+              )}
             </div>
           </aside>
 

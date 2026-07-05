@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getHypcheck } from "@/lib/store";
 import { deleteHypcheckAction, updateSettingsAction } from "@/lib/actions";
 import { CADENCE_LABELS, DEPTH_LABELS, type Cadence, type Depth } from "@/lib/types";
+import { requireUser } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ const CADENCES: Cadence[] = ["daily", "weekly", "biweekly", "monthly"];
 const DEPTHS: Depth[] = ["brief", "standard", "deep"];
 
 export default async function SettingsPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser();
   const { id } = await params;
   const hypcheck = await getHypcheck(id);
   if (!hypcheck) notFound();

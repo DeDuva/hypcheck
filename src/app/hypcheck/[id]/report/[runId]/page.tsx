@@ -6,10 +6,12 @@ import { getHypcheck, getRun, listRuns } from "@/lib/store";
 import { formatDate, formatTime, stripReportPreamble } from "@/lib/format";
 import { ModeBadge, ScoreChip, StanceBadge } from "@/components/ScoreChip";
 import { DeltaBadge } from "@/components/DeltaBadge";
+import { requireUser } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportPage({ params }: { params: Promise<{ id: string; runId: string }> }) {
+  await requireUser();
   const { id, runId } = await params;
   const [hypcheck, run, runs] = await Promise.all([getHypcheck(id), getRun(runId), listRuns(id)]);
   if (!hypcheck || !run || run.hypcheckId !== id) notFound();
