@@ -16,6 +16,7 @@ import {
   type CreateHypcheckInput,
 } from "./store";
 import { engineInfo } from "./engine";
+import { requireUser } from "./authz";
 import type { Cadence, Depth, RefineResult } from "./types";
 import { logger, newRequestId, serializeError } from "./logger";
 
@@ -25,12 +26,14 @@ function actionLogger(action: string, ctx: Record<string, unknown> = {}) {
 }
 
 export async function refineAction(statement: string): Promise<RefineResult & { mode: "live" | "heuristic" }> {
-  const log = actionLogger("refine", { statementLen: statement.length });
+  const viewer = await requireUser();
+  const log = actionLogger("refine", { userId: viewer.id, statementLen: statement.length });
   return log.span("action.refine", () => refineHypothesis(statement, log));
 }
 
 export async function createHypcheckAction(input: CreateHypcheckInput): Promise<void> {
-  const log = actionLogger("createHypcheck", { name: input.name, metricCount: input.metrics.length });
+  const viewer = await requireUser();
+  const log = actionLogger("createHypcheck", { userId: viewer.id, name: input.name, metricCount: input.metrics.length });
   await log.span("action.createHypcheck", async () => {
     const hypcheck = await createHypcheck(input);
     log.info("hypcheck.created", { hypcheckId: hypcheck.id });
@@ -50,7 +53,8 @@ export async function createHypcheckAction(input: CreateHypcheckInput): Promise<
  * background function budget.
  */
 export async function runNowAction(hypcheckId: string): Promise<void> {
-  const log = actionLogger("runNow", { hypcheckId });
+  const viewer = await requireUser();
+  const log = actionLogger("runNow", { userId: viewer.id, hypcheckId });
   const hypcheck = await getHypcheck(hypcheckId);
   if (!hypcheck) throw new Error("Hypcheck not found");
 
@@ -77,7 +81,8 @@ export async function runNowAction(hypcheckId: string): Promise<void> {
 }
 
 export async function acceptInsightAction(insightId: string): Promise<void> {
-  const log = actionLogger("acceptInsight", { insightId });
+  const viewer = await requireUser();
+  const log = actionLogger("acceptInsight", { userId: viewer.id, insightId });
   await log.span("action.acceptInsight", async () => {
     const insight = await getInsight(insightId);
     if (!insight?.proposedRevision) throw new Error("Insight has no proposed revision");
@@ -94,7 +99,8 @@ export async function acceptInsightAction(insightId: string): Promise<void> {
 }
 
 export async function dismissInsightAction(insightId: string): Promise<void> {
-  const log = actionLogger("dismissInsight", { insightId });
+  const viewer = await requireUser();
+  const log = actionLogger("dismissInsight", { userId: viewer.id, insightId });
   await log.span("action.dismissInsight", async () => {
     await setInsightStatus(insightId, "dismissed");
     revalidatePath("/", "layout");
@@ -102,7 +108,8 @@ export async function dismissInsightAction(insightId: string): Promise<void> {
 }
 
 export async function reviseHypothesisAction(hypcheckId: string, formData: FormData): Promise<void> {
-  const log = actionLogger("reviseHypothesis", { hypcheckId });
+  const viewer = await requireUser();
+  const log = actionLogger("reviseHypothesis", { userId: viewer.id, hypcheckId });
   await log.span("action.reviseHypothesis", async () => {
     const statement = String(formData.get("statement") ?? "").trim();
     const changeSummary = String(formData.get("changeSummary") ?? "").trim();
@@ -114,7 +121,8 @@ export async function reviseHypothesisAction(hypcheckId: string, formData: FormD
 }
 
 export async function updateSettingsAction(hypcheckId: string, formData: FormData): Promise<void> {
-  const log = actionLogger("updateSettings", { hypcheckId });
+  const viewer = await requireUser();
+  const log = actionLogger("updateSettings", { userId: viewer.id, hypcheckId });
   await log.span("action.updateSettings", async () => {
     const watchlistRaw = String(formData.get("watchlist") ?? "");
     await updateHypcheckSettings(hypcheckId, {
@@ -133,7 +141,8 @@ export async function updateSettingsAction(hypcheckId: string, formData: FormDat
 }
 
 export async function deleteHypcheckAction(hypcheckId: string): Promise<void> {
-  const log = actionLogger("deleteHypcheck", { hypcheckId });
+  const viewer = await requireUser();
+  const log = actionLogger("deleteHypcheck", { userId: viewer.id, hypcheckId });
   await log.span("action.deleteHypcheck", async () => {
     await deleteHypcheck(hypcheckId);
     log.info("hypcheck.deleted", { hypcheckId });

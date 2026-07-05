@@ -317,6 +317,10 @@ export function ensureSeeded(): Promise<void> {
   if (!seedPromise) {
     seedPromise = (async () => {
       if (process.env.HYPCHECK_DEMO === "0") return;
+      // In production demo data is opt-in (HYPCHECK_DEMO=1): auto-seeding a
+      // live deployment creates hypchecks that cron then runs on a cadence —
+      // real API spend nobody asked for.
+      if (process.env.NODE_ENV === "production" && process.env.HYPCHECK_DEMO !== "1") return;
       const db = await getDb();
       const res = await db.execute("SELECT COUNT(*) AS c FROM hypchecks");
       const count = Number((res.rows[0] as Record<string, unknown>).c ?? 0);
