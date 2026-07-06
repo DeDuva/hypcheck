@@ -100,7 +100,7 @@ export function simulateRun(
         : raw <= targetScore - 5
           ? pick(rand, METRIC_NOTES_NEG)
           : pick(rand, METRIC_NOTES_MID);
-    return { metricId: m.id, name: m.name, score: Math.round(raw), note };
+    return { metricId: m.id, name: m.name, score: Math.round(raw), note, freshness: "fresh" as const, carriedForward: false };
   });
 
   // Recompute the headline as the weighted metric average nudged toward target.
@@ -158,6 +158,15 @@ export function simulateRun(
 
   const confidence = Math.round((0.55 + rand() * 0.25) * 100) / 100;
 
+  const changesSinceLastRun =
+    prevScore == null
+      ? null
+      : delta > 1.5
+        ? `The signal picture firmed up since the last run (+${Math.abs(delta).toFixed(1)} points), led by ${strongest?.name.toLowerCase() ?? "demand"}. No structural market change was observed this period.`
+        : delta < -1.5
+          ? `The signal picture softened since the last run (-${Math.abs(delta).toFixed(1)} points), with ${weakest?.name.toLowerCase() ?? "differentiation"} the main drag. No structural market change was observed this period.`
+          : `Little moved since the last run: scores held within noise range and no watchlist player made a market-shaping announcement this period.`;
+
   const industryAnalysis = synthIndustryAnalysis({
     hypcheckName: hypcheck.name,
     watchlist: hypcheck.watchlist,
@@ -183,6 +192,7 @@ export function simulateRun(
     watchlist: hypcheck.watchlist,
     watchlistNotes,
     insights,
+    changesSinceLastRun,
     risks: [
       `Weakest current signal: ${weakest?.name.toLowerCase() ?? "n/a"} — a second consecutive soft reading should trigger a hypothesis review.`,
       "Simulated-mode data is illustrative; treat trends, not absolute values, as the decision input.",
@@ -195,5 +205,5 @@ export function simulateRun(
     ],
   });
 
-  return { pmfScore, confidence, execSummary, reportMd, metricScores, industryAnalysis, insights };
+  return { pmfScore, confidence, execSummary, reportMd, metricScores, industryAnalysis, changesSinceLastRun, insights };
 }

@@ -1,5 +1,5 @@
-import type { Hypcheck, RefineResult, Run } from "../types";
-import { currentVersion, latestRun, listMetrics, recordRun, setLastRunAttempt, setNextRun, type RunAttempt } from "../store";
+import type { Hypcheck, PriorRunDigest, RefineResult, Run } from "../types";
+import { currentVersion, latestRun, listInsights, listMetrics, recordRun, setLastRunAttempt, setNextRun, type RunAttempt } from "../store";
 import { engineInfo, liveEngineAvailable, liveRefine, liveRun } from "./claude";
 import { simulateRun } from "./simulate";
 import { Logger, logger, newRequestId, serializeError } from "../logger";
@@ -43,18 +43,28 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
     async () => {
       // Independent reads run in parallel — on a high-latency (cross-region)
       // DB, serializing these alone can burn double-digit seconds.
-      const [version, metrics, prior] = await Promise.all([
+      const [version, metrics, prior, openInsights] = await Promise.all([
         currentVersion(hypcheck.id),
         listMetrics(hypcheck.id),
         latestRun(hypcheck.id),
+        listInsights(hypcheck.id, "new"),
       ]);
       const start = Date.now();
 
       let run: Run;
       let fellBack = false;
       if (liveEngineAvailable()) {
-        const priorContext = prior
-          ? `Previous run (${prior.runAt.slice(0, 10)}, hypothesis v${prior.hypothesisVersion}) scored ${prior.pmfScore}/100. Summary: ${prior.execSummary}`
+        // Structured digest of the previous run so the engine scores against
+        // it (consistency + carry-forward) and reports what changed.
+        const priorDigest: PriorRunDigest | null = prior
+          ? {
+              runAt: prior.runAt,
+              hypothesisVersion: prior.hypothesisVersion,
+              pmfScore: prior.pmfScore,
+              stance: prior.industryAnalysis?.stance ?? null,
+              metricScores: prior.metricScores,
+              openInsightTitles: openInsights.map((i) => i.title).slice(0, 5),
+            }
           : null;
         try {
           // Report coarse progress into the attempt marker so a mid-run poll of
@@ -69,7 +79,7 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
               phase,
               researchMs: typeof extra.researchMs === "number" ? extra.researchMs : undefined,
             });
-          const { result, telemetry, runAt } = await liveRun(hypcheck, version, metrics, priorContext, log, onPhase);
+          const { result, telemetry, runAt } = await liveRun(hypcheck, version, metrics, priorDigest, log, onPhase);
           // Persist the same instant the report was rendered against, so the
           // report body's date can never drift from the run's `runAt`.
           run = await recordRun(hypcheck.id, version, "live", result, runAt, {

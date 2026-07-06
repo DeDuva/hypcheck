@@ -1,6 +1,6 @@
 # Signal Quality Plan
 
-**Status: planned — no phase implemented yet.** As each phase ships, mark it here and add/update the corresponding line in the README's "Signal quality" section.
+**Status: phase 1 implemented (freshness discipline + carry-forward); phases 2–4 not started.** As each phase ships, mark it here and add/update the corresponding line in the README's "Signal quality" section.
 
 > Note: "phase" numbers in this doc are the signal-quality track. They are unrelated to the access-control phases (auth wall / roles / sharing) already referenced in the README.
 
