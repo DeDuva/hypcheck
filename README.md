@@ -20,6 +20,15 @@ Establish a product hypothesis, then track its product-market-fit signal over ti
 
 A fresh database is seeded with two demo hypchecks (~4 months of weekly history, a mid-timeline hypothesis revision, and pending insight proposals). Disable with `HYPCHECK_DEMO=0`.
 
+## Signal quality
+
+Runs enforce an evidence-freshness discipline — phase 1 of the [signal-quality plan](docs/signal-quality-plan.md):
+
+- Each run defines a **freshness window** (the period since the previous run); only evidence published inside it may move a metric's score, and every cited source carries its publication date.
+- A metric with no fresh evidence **carries forward** its prior score, flagged in the report, in the metric breakdown, and as hollow points on the PMF chart. "Nothing changed" is a first-class finding, not a gap.
+- The PMF score is computed **deterministically in code** as the freshness-gated weighted average of metric scores (the model's own holistic number is only logged as a sanity check), and confidence drops mechanically as fresh coverage drops.
+- Every run after the first opens with a **"What changed since <date>"** delta summary, grounded in a structured digest of the previous run (per-metric scores, analyst stance, open insights).
+
 ## Run locally
 
 ```bash

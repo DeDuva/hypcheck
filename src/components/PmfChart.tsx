@@ -25,6 +25,7 @@ export interface ChartPoint {
   version: number;
   mode: "simulated" | "live";
   versionChange: boolean;
+  carriedForward: boolean; // no fresh signal this run — every metric carried its prior score
 }
 
 const IRIS = "#4f46e5";
@@ -45,6 +46,9 @@ function HoverTooltip({ active, payload }: { active?: boolean; payload?: Tooltip
           {Math.round(point.score)}
         </span>
       </div>
+      {point.carriedForward && (
+        <p className="mt-1.5 text-[11.5px] font-medium text-ink-faint">No fresh signal — score carried forward</p>
+      )}
       <p className="mt-2 line-clamp-4 text-[12.5px] leading-relaxed text-ink-soft">{point.execSummary}</p>
       <p className="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-iris">
         <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -126,14 +130,17 @@ export function PmfChart({ points, hypcheckId }: { points: ChartPoint[]; hypchec
               dot={(props) => {
                 const { cx, cy, payload, index } = props as { cx: number; cy: number; payload: ChartPoint; index: number };
                 const isPinned = payload.runId === pinnedId;
+                // Carried-forward runs (no fresh signal) render hollow and muted
+                // so a flat stretch reads as "nothing new", not "re-confirmed".
+                const stroke = payload.carriedForward ? "#b8b4a8" : IRIS;
                 return (
                   <circle
                     key={`dot-${index}`}
                     cx={cx}
                     cy={cy}
                     r={isPinned ? 5 : 3}
-                    fill={isPinned ? IRIS : "#fff"}
-                    stroke={IRIS}
+                    fill={isPinned ? stroke : "#fff"}
+                    stroke={stroke}
                     strokeWidth={isPinned ? 2 : 1.75}
                     style={{ cursor: "pointer" }}
                   />
@@ -154,6 +161,11 @@ export function PmfChart({ points, hypcheckId }: { points: ChartPoint[]; hypchec
                 Hypothesis v{pinned.version}
               </span>
               <ModeBadge mode={pinned.mode} />
+              {pinned.carriedForward && (
+                <span className="rounded-full bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-faint ring-1 ring-inset ring-edge">
+                  Carried forward
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2.5">
               <span className="tnum text-[18px] font-semibold leading-none">{Math.round(pinned.score)}</span>
