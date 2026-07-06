@@ -40,6 +40,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
     version: r.hypothesisVersion,
     mode: r.mode,
     versionChange: i > 0 && r.hypothesisVersion !== runs[i - 1].hypothesisVersion,
+    carriedForward: r.metricScores.length > 0 && r.metricScores.every((ms) => ms.carriedForward),
   }));
 
   const pendingProposals = insights.filter((i) => i.status === "new" && i.proposedRevision);
@@ -192,7 +193,17 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
                 const band = scoreBand(ms.score);
                 return (
                   <div key={ms.name} className="flex items-center justify-between gap-3">
-                    <span className="truncate text-[12.5px] text-ink-soft">{ms.name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-[12.5px] text-ink-soft">{ms.name}</span>
+                      {ms.carriedForward && (
+                        <span
+                          className="shrink-0 rounded-full bg-paper px-1.5 py-px text-[10px] font-medium text-ink-faint ring-1 ring-inset ring-edge"
+                          title="No fresh evidence this run — the prior score carried forward"
+                        >
+                          carried
+                        </span>
+                      )}
+                    </span>
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-16 overflow-hidden rounded-full bg-paper">
                         <div

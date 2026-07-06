@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS runs (
   input_tokens INTEGER,
   output_tokens INTEGER,
   searches INTEGER,
-  industry_analysis TEXT
+  industry_analysis TEXT,
+  changes_summary TEXT
 );
 CREATE TABLE IF NOT EXISTS insights (
   id TEXT PRIMARY KEY,
@@ -154,6 +155,7 @@ const MIGRATIONS: Record<string, Record<string, string>> = {
     output_tokens: "INTEGER",
     searches: "INTEGER",
     industry_analysis: "TEXT",
+    changes_summary: "TEXT",
   },
   hypchecks: {
     owner_id: "TEXT",

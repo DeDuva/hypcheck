@@ -92,11 +92,17 @@ export interface Metric {
   weight: number; // 1-5
 }
 
+/** Age of the newest evidence supporting a metric score, relative to the
+ * run's freshness window (the period since the previous run). */
+export type EvidenceFreshness = "fresh" | "stale" | "none";
+
 export interface MetricScore {
   metricId: string;
   name: string;
   score: number; // 0-100
   note: string;
+  freshness?: EvidenceFreshness; // absent on runs recorded before freshness discipline
+  carriedForward?: boolean; // true when the score is the prior run's, kept because no fresh evidence emerged
 }
 
 export interface RunTelemetry {
@@ -119,6 +125,7 @@ export interface Run {
   reportMd: string;
   metricScores: MetricScore[];
   industryAnalysis: IndustryAnalysis | null; // null on runs recorded before this feature
+  changesSinceLastRun: string | null; // delta summary vs the previous run; null on first runs and pre-feature runs
   telemetry: RunTelemetry;
 }
 
@@ -141,12 +148,24 @@ export interface RunResult {
   reportMd: string;
   metricScores: MetricScore[];
   industryAnalysis: IndustryAnalysis;
+  changesSinceLastRun: string | null;
   insights: Array<{
     title: string;
     body: string;
     direction: InsightDirection;
     proposedRevision: string | null;
   }>;
+}
+
+/** Digest of the previous run, passed into the engine so each run scores
+ * consistently against it and reports what changed. */
+export interface PriorRunDigest {
+  runAt: string; // ISO
+  hypothesisVersion: number;
+  pmfScore: number;
+  stance: AnalystStance | null;
+  metricScores: MetricScore[];
+  openInsightTitles: string[];
 }
 
 export interface RefineResult {

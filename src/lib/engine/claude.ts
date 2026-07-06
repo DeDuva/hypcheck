@@ -1,6 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Depth, Hypcheck, HypothesisVersion, Metric, RefineResult, RunResult, RunTelemetry } from "../types";
-import { DEPTH_LABELS } from "../types";
+import type {
+  Depth,
+  EvidenceFreshness,
+  Hypcheck,
+  HypothesisVersion,
+  Metric,
+  PriorRunDigest,
+  RefineResult,
+  RunResult,
+  RunTelemetry,
+} from "../types";
+import { CADENCE_DAYS, DEPTH_LABELS, STANCE_LABELS } from "../types";
 import { buildReportMd } from "./report";
 import { Logger, logger as rootLogger } from "../logger";
 
@@ -60,8 +70,14 @@ const RESULT_SCHEMA = {
           name: { type: "string", description: "Metric name, exactly as provided" },
           score: { type: "number", description: "0-100 score for this metric" },
           note: { type: "string", description: "2-3 sentence evidence-based justification" },
+          freshness: {
+            type: "string",
+            enum: ["fresh", "stale", "none"],
+            description:
+              "Age of the NEWEST evidence supporting this score: 'fresh' if inside the freshness window, 'stale' if only older evidence was found, 'none' if no usable evidence was found",
+          },
         },
-        required: ["name", "score", "note"],
+        required: ["name", "score", "note", "freshness"],
         additionalProperties: false,
       },
     },
@@ -116,21 +132,30 @@ const RESULT_SCHEMA = {
         additionalProperties: false,
       },
     },
+    changesSinceLastRun: {
+      type: ["string", "null"],
+      description:
+        "2-4 sentences on what materially changed since the previous run — new events, metric movements, and why. Null if there is no previous run.",
+    },
     sources: {
       type: "array",
-      description: "Every web source cited anywhere in the report, as {title, url} pairs",
+      description: "Every web source cited anywhere in the report",
       items: {
         type: "object",
         properties: {
           title: { type: "string" },
           url: { type: "string" },
+          publishedAt: {
+            type: ["string", "null"],
+            description: "Publication date of the source as YYYY-MM-DD if known, else null. Never guess.",
+          },
         },
-        required: ["title", "url"],
+        required: ["title", "url", "publishedAt"],
         additionalProperties: false,
       },
     },
   },
-  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes", "sources"],
+  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes", "changesSinceLastRun", "sources"],
   additionalProperties: false,
 } as const;
 
@@ -141,7 +166,8 @@ interface StructuredResult {
   pmfScore: number;
   confidence: number;
   execSummary: string;
-  metricScores: Array<{ name: string; score: number; note: string }>;
+  changesSinceLastRun: string | null;
+  metricScores: Array<{ name: string; score: number; note: string; freshness: EvidenceFreshness }>;
   industryAnalysis: {
     headline: string;
     stance: (typeof STANCES)[number];
@@ -155,8 +181,10 @@ interface StructuredResult {
   risks: string[];
   actions: string[];
   watchlistNotes: Array<{ name: string; note: string }>;
-  sources: Array<{ title: string; url: string }>;
+  sources: Array<{ title: string; url: string; publishedAt: string | null }>;
 }
+
+const FRESHNESS_VALUES: readonly EvidenceFreshness[] = ["fresh", "stale", "none"];
 
 export type PhaseReporter = (phase: string, extra?: Record<string, unknown>) => void | Promise<void>;
 
@@ -164,12 +192,31 @@ export async function liveRun(
   hypcheck: Hypcheck,
   version: HypothesisVersion,
   metrics: Metric[],
-  priorContext: string | null,
+  prior: PriorRunDigest | null,
   log: Logger = rootLogger,
   onPhase?: PhaseReporter
 ): Promise<LiveRunOutput> {
   const anthropic = client();
   const runDate = new Date();
+
+  // Freshness window: everything since the previous run is "new to this
+  // hypcheck" (a long pause widens the window accordingly); first runs get
+  // 2x the cadence so there is enough recent material to score against.
+  const windowDays = prior
+    ? Math.max(1, Math.ceil((runDate.getTime() - new Date(prior.runAt).getTime()) / 86_400_000))
+    : CADENCE_DAYS[hypcheck.cadence] * 2;
+
+  const priorSection = prior
+    ? [
+        `## Previous run (${prior.runAt.slice(0, 10)}, hypothesis v${prior.hypothesisVersion}) — scored ${prior.pmfScore}/100${prior.stance ? `, analyst's call: ${STANCE_LABELS[prior.stance]}` : ""}`,
+        `Per-metric scores from that run:`,
+        ...prior.metricScores.map((ms) => `- ${ms.name}: ${Math.round(ms.score)}/100${ms.carriedForward ? " (carried forward)" : ""} — ${ms.note}`),
+        ...(prior.openInsightTitles.length
+          ? [`Insights still under review by the product manager:`, ...prior.openInsightTitles.map((t) => `- ${t}`)]
+          : []),
+        `Score consistently against these values: where nothing fresh emerged, say so rather than re-litigating old evidence.`,
+      ].join("\n")
+    : ``;
 
   const researchPrompt = [
     `You are a market researcher assessing product-market-fit evidence for a product hypothesis. Research the CURRENT state of the market using web search, then return your findings as a single structured research result.`,
@@ -183,13 +230,21 @@ export async function liveRun(
     hypcheck.watchlist.length
       ? `## Watchlist — check each for recent moves relevant to the hypothesis\n${hypcheck.watchlist.map((w) => `- ${w}`).join("\n")}`
       : ``,
-    priorContext ? `## Context from the previous run\n${priorContext}` : ``,
+    priorSection,
+    ``,
+    `## Evidence freshness (hard rule)`,
+    `Today is ${runDate.toISOString().slice(0, 10)}. The freshness window is the last ${windowDays} days${prior ? ` (everything since the previous run)` : ""}.`,
+    `- Scope searches to recent material: prefer recency-qualified queries and results from inside the window.`,
+    `- Only evidence published inside the window may move a metric score. Older material (up to ~90 days) is background context only — it must not change scores on its own.`,
+    `- For every source, set \`publishedAt\` (YYYY-MM-DD) when the publication date is known; otherwise null. Never guess dates.`,
+    `- For each metric, set \`freshness\`: "fresh" if the newest evidence supporting the score is inside the window, "stale" if you found only older evidence, "none" if you found no usable evidence. Do not stretch — "no fresh signal" is a valid, useful finding.`,
     ``,
     `## Instructions`,
     `- Research depth: ${DEPTH_LABELS[hypcheck.depth]}. Run at most ${DEPTH_SEARCHES[hypcheck.depth]} web searches total for this entire report — budget them across the whole task, front-loading the searches you need to assess the metrics and the watchlist.`,
     `- Ground every claim in what you find. When a field draws on a source, cite it inline as a markdown link, and list every source you cite in the \`sources\` array.`,
-    `- \`execSummary\`: a 3-4 sentence executive summary of this period's findings, written for a product manager.`,
-    `- \`metricScores\`: assess each metric (use the exact metric names: ${metrics.map((m) => m.name).join(", ")}) with a 0-100 score and a 2-3 sentence evidence-based \`note\`. Then derive an overall \`pmfScore\` (0-100) as a weighted judgment, plus a \`confidence\` (0-1).`,
+    `- \`execSummary\`: a 3-4 sentence executive summary of this period's findings, written for a product manager.${prior ? " Lead with what changed since the previous run." : ""}`,
+    `- \`changesSinceLastRun\`: ${prior ? "2-4 sentences on what materially changed since the previous run — events, metric movements, and why." : "null (this is the first run)."}`,
+    `- \`metricScores\`: assess each metric (use the exact metric names: ${metrics.map((m) => m.name).join(", ")}) with a 0-100 score, a 2-3 sentence evidence-based \`note\`, and its \`freshness\`. Then derive an overall \`pmfScore\` (0-100) as a weighted judgment, plus a \`confidence\` (0-1).`,
     `- \`insights\`: surface 1-3 insights. Mark each as supporting, challenging, or watch. If an insight genuinely warrants amending the hypothesis, include a complete \`proposedRevision\` of the hypothesis statement; otherwise set it to null.`,
     `- \`risks\` and \`actions\`: key risks and recommended actions for the product manager.`,
     hypcheck.watchlist.length
@@ -252,14 +307,54 @@ export async function liveRun(
   const data = JSON.parse(jsonText) as StructuredResult;
 
   const metricByName = new Map(metrics.map((m) => [m.name.toLowerCase(), m]));
+  const priorScoreByName = new Map((prior?.metricScores ?? []).map((ms) => [ms.name.toLowerCase(), ms.score]));
   const metricScores = data.metricScores.map((ms) => {
     const metric = metricByName.get(ms.name.toLowerCase());
+    const freshness = FRESHNESS_VALUES.includes(ms.freshness) ? ms.freshness : ("fresh" as EvidenceFreshness);
+    const priorScore = priorScoreByName.get(ms.name.toLowerCase());
+    // No fresh evidence -> the prior score stands; the market didn't move just
+    // because old articles resurfaced in search results.
+    const carriedForward = freshness !== "fresh" && priorScore != null;
     return {
       metricId: metric?.id ?? "",
       name: metric?.name ?? ms.name,
-      score: Math.max(0, Math.min(100, ms.score)),
+      score: carriedForward ? priorScore : Math.max(0, Math.min(100, ms.score)),
       note: ms.note,
+      freshness,
+      carriedForward,
     };
+  });
+
+  // Deterministic, freshness-gated PMF score: the weighted average of fresh and
+  // carried-forward metric scores. Stale evidence cannot move the number even
+  // if the model's own holistic judgment says otherwise (that judgment is kept
+  // in telemetry logs as a sanity cross-check). On a first run, metrics with no
+  // fresh signal have nothing to carry and are excluded from the weighting.
+  let weightedSum = 0;
+  let countedWeight = 0;
+  let freshWeight = 0;
+  let allWeight = 0;
+  for (const ms of metricScores) {
+    const weight = metricByName.get(ms.name.toLowerCase())?.weight ?? 3;
+    allWeight += weight;
+    if (ms.freshness === "fresh") freshWeight += weight;
+    if (ms.freshness === "fresh" || ms.carriedForward) {
+      weightedSum += ms.score * weight;
+      countedWeight += weight;
+    }
+  }
+  const modelPmfScore = Math.max(0, Math.min(100, data.pmfScore));
+  const pmfScore = countedWeight > 0 ? weightedSum / countedWeight : modelPmfScore;
+  const freshFraction = allWeight > 0 ? freshWeight / allWeight : 0;
+  // Confidence drops mechanically as fresh coverage drops: all-fresh keeps the
+  // model's confidence, an all-carried run halves it.
+  const confidence = Math.max(0, Math.min(1, data.confidence)) * (0.5 + 0.5 * freshFraction);
+  log.info("engine.score.computed", {
+    pmfScore: Math.round(pmfScore * 10) / 10,
+    modelPmfScore,
+    freshFraction: Math.round(freshFraction * 100) / 100,
+    carried: metricScores.filter((ms) => ms.carriedForward).length,
+    windowDays,
   });
 
   const ia = data.industryAnalysis;
@@ -273,10 +368,13 @@ export async function liveRun(
     implications: ia.implications,
   };
 
-  const pmfScore = Math.max(0, Math.min(100, data.pmfScore));
-  const confidence = Math.max(0, Math.min(1, data.confidence));
   const watchlistNotes: Record<string, string> = {};
   for (const w of data.watchlistNotes ?? []) watchlistNotes[w.name] = w.note;
+
+  const changesSinceLastRun = prior ? data.changesSinceLastRun : null;
+  // First freshness-gated run on top of pre-freshness history: flag the method
+  // change in the report so the trend break is explainable.
+  const methodChangeNote = prior != null && prior.metricScores.length > 0 && prior.metricScores.every((ms) => ms.freshness == null);
 
   // Render the markdown report locally from the structured result, reusing the
   // same builder the simulated engine uses.
@@ -298,6 +396,10 @@ export async function liveRun(
     risks: data.risks,
     actions: data.actions,
     sources: Array.isArray(data.sources) ? data.sources : [],
+    changesSinceLastRun,
+    priorRunDate: prior?.runAt ?? null,
+    windowDays,
+    methodChangeNote,
   });
 
   return {
@@ -308,6 +410,7 @@ export async function liveRun(
       reportMd: `${reportBody}\n---\n\n*Report generated ${runDate.toISOString().slice(0, 10)} by live web research (${DEPTH_LABELS[hypcheck.depth]}).*\n`,
       metricScores,
       industryAnalysis,
+      changesSinceLastRun,
       insights: data.insights,
     },
     telemetry: {
