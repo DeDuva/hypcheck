@@ -116,3 +116,17 @@ export async function requireCanCreateHypcheck(): Promise<Viewer> {
   }
   return viewer;
 }
+
+/**
+ * The global admin console (user role management) is gated even in shadow
+ * mode — unlike the rest of phase 2, there's no pre-existing behavior to
+ * preserve here, so this always blocks non-admins rather than just logging.
+ */
+export async function requireAdmin(): Promise<Viewer> {
+  const viewer = await requireUser();
+  if (viewer.role !== "admin") {
+    logger.warn("authz.admin.denied", { userId: viewer.id });
+    redirect("/");
+  }
+  return viewer;
+}

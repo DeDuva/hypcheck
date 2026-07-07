@@ -261,3 +261,9 @@ export const DEPTH_LABELS: Record<Depth, string> = {
   standard: "Standard",
   deep: "Deep dive",
 };
+
+export const GLOBAL_ROLE_LABELS: Record<GlobalRole, string> = {
+  admin: "Admin",
+  creator: "Creator",
+  member: "Member",
+};
