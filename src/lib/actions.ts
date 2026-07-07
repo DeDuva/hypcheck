@@ -273,4 +273,8 @@ export async function updateUserRoleAction(userId: string, formData: FormData): 
   await updateUserRole(userId, role);
   log.info("user.role.changed", { targetUserId: userId, role });
   revalidatePath("/admin");
+  // Same fix as updateAccessRoleAction: the role <select> is uncontrolled
+  // (defaultValue), so an in-place RSC patch never updates its displayed
+  // value — force a real navigation.
+  redirect("/admin");
 }
