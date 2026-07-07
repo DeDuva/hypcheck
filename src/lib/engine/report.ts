@@ -20,6 +20,8 @@ export interface ReportInput {
   actions: string[];
   sources?: Array<{ title: string; url: string; publishedAt?: string | null }>;
   changesSinceLastRun?: string | null;
+  evidenceFor?: string | null; // strongest fresh evidence supporting the hypothesis this period
+  evidenceAgainst?: string | null; // strongest fresh evidence challenging it
   priorRunDate?: string | null; // ISO date of the previous run, for the "what changed" heading
   windowDays?: number; // freshness window used by this run
   methodChangeNote?: boolean; // true on the first freshness-gated run after older-method runs
@@ -88,6 +90,17 @@ export function buildReportMd(r: ReportInput): string {
     lines.push(`## What changed${r.priorRunDate ? ` since ${r.priorRunDate.slice(0, 10)}` : ""}`);
     lines.push("");
     lines.push(r.changesSinceLastRun);
+    lines.push("");
+  }
+  if (r.evidenceFor || r.evidenceAgainst) {
+    // GFM table cells cannot contain raw pipes or newlines.
+    const cell = (s: string | null | undefined) =>
+      (s ?? "*Nothing material this period.*").replace(/\s*\n+\s*/g, " ").replace(/\|/g, "\\|");
+    lines.push(`### Strongest fresh evidence`);
+    lines.push("");
+    lines.push(`| For the hypothesis | Against the hypothesis |`);
+    lines.push(`| --- | --- |`);
+    lines.push(`| ${cell(r.evidenceFor)} | ${cell(r.evidenceAgainst)} |`);
     lines.push("");
   }
   if (r.industryAnalysis) {

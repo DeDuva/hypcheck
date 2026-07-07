@@ -178,6 +178,15 @@ export function simulateRun(
     rand,
   });
 
+  const evidenceFor =
+    strongest && strongest.score >= 55
+      ? `${strongest.name} held the strongest reading this period (${Math.round(strongest.score)}/100): ${strongest.note}`
+      : null;
+  const evidenceAgainst =
+    weakest && weakest.score < 55
+      ? `${weakest.name} was the softest signal this period (${Math.round(weakest.score)}/100): ${weakest.note}`
+      : null;
+
   const reportMd = buildReportMd({
     name: hypcheck.name,
     statement: version.statement,
@@ -194,6 +203,8 @@ export function simulateRun(
     watchlistNotes,
     insights,
     changesSinceLastRun,
+    evidenceFor,
+    evidenceAgainst,
     risks: [
       `Weakest current signal: ${weakest?.name.toLowerCase() ?? "n/a"} — a second consecutive soft reading should trigger a hypothesis review.`,
       "Simulated-mode data is illustrative; treat trends, not absolute values, as the decision input.",

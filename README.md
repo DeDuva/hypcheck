@@ -33,6 +33,8 @@ Metrics are **external-only** (phase 2): every metric must be assessable purely 
 
 Hypothesis authoring is a **grounded studio** (phase 3): "Refine with AI" now researches the current market via web search before critiquing, scores the draft against a five-check rubric (named segment · falsifiable · externally observable · time-bound · differentiated), and may ask up to two clarifying questions that power one refine-again round. The critique + rubric persist with the hypcheck (shown on Settings). Watchlist entries carry a *reason* ("closest incumbent for the same JTBD"), which runs use to target their checks — and runs can propose watchlist adds/removes, accepted or dismissed from the insights feed like hypothesis revisions.
 
+Each run is a **stress test, not a survey** (phase 4): the run persona is the strategy advisor who authored the hypothesis, honestly weighing this period's evidence. Every report names the single strongest piece of fresh evidence **for** and **against** the hypothesis (a compact two-column callout), and makes an explicit revision call — either exactly one insight carries a complete proposed revision, or the summary states why the current framing still stands.
+
 ## Run locally
 
 ```bash
