@@ -6,9 +6,11 @@ import { after } from "next/server";
 import { executeRun, refineHypothesis } from "./engine";
 import {
   addVersion,
+  applyWatchlistChange,
   createHypcheck,
   createInvitation,
   deleteHypcheck,
+  getHypcheck,
   getInsight,
   getUserByEmail,
   grantAccess,
@@ -21,7 +23,7 @@ import {
 } from "./store";
 import { engineInfo } from "./engine";
 import { requireCanCreateHypcheck, requireHypcheckAccess, requireUser } from "./authz";
-import type { Cadence, Depth, GrantRole, RefineResult } from "./types";
+import type { Cadence, Depth, GrantRole, RefineAnswer, RefineResult } from "./types";
 import { logger, newRequestId, serializeError } from "./logger";
 
 /** Every server action runs inside a correlated span so it's traceable in logs. */
@@ -29,10 +31,13 @@ function actionLogger(action: string, ctx: Record<string, unknown> = {}) {
   return logger.child({ action, reqId: newRequestId(), ...ctx });
 }
 
-export async function refineAction(statement: string): Promise<RefineResult & { mode: "live" | "heuristic" }> {
+export async function refineAction(
+  statement: string,
+  answers: RefineAnswer[] = []
+): Promise<RefineResult & { mode: "live" | "heuristic" }> {
   const viewer = await requireUser();
-  const log = actionLogger("refine", { userId: viewer.id, statementLen: statement.length });
-  return log.span("action.refine", () => refineHypothesis(statement, log));
+  const log = actionLogger("refine", { userId: viewer.id, statementLen: statement.length, answered: answers.length });
+  return log.span("action.refine", () => refineHypothesis(statement, answers, log));
 }
 
 export async function createHypcheckAction(input: CreateHypcheckInput): Promise<void> {
@@ -84,19 +89,25 @@ export async function runNowAction(hypcheckId: string): Promise<void> {
 
 export async function acceptInsightAction(insightId: string): Promise<void> {
   const insight = await getInsight(insightId);
-  const proposedRevision = insight?.proposedRevision;
-  if (!insight || !proposedRevision) throw new Error("Insight has no proposed revision");
+  if (!insight || (!insight.proposedRevision && !insight.proposedWatchlistChange)) {
+    throw new Error("Insight has no proposal to accept");
+  }
   const { viewer } = await requireHypcheckAccess(insight.hypcheckId, "editor");
   const log = actionLogger("acceptInsight", { userId: viewer.id, insightId });
   await log.span("action.acceptInsight", async () => {
-    const version = await addVersion(
-      insight.hypcheckId,
-      proposedRevision,
-      `Accepted insight: ${insight.title}`,
-      "insight"
-    );
+    if (insight.proposedRevision) {
+      const version = await addVersion(
+        insight.hypcheckId,
+        insight.proposedRevision,
+        `Accepted insight: ${insight.title}`,
+        "insight"
+      );
+      log.info("hypothesis.versioned", { hypcheckId: insight.hypcheckId, version: version.version, source: "insight" });
+    } else if (insight.proposedWatchlistChange) {
+      await applyWatchlistChange(insight.hypcheckId, insight.proposedWatchlistChange);
+      log.info("watchlist.changed", { hypcheckId: insight.hypcheckId, ...insight.proposedWatchlistChange });
+    }
     await setInsightStatus(insightId, "accepted");
-    log.info("hypothesis.versioned", { hypcheckId: insight.hypcheckId, version: version.version, source: "insight" });
     revalidatePath("/", "layout");
   });
 }
@@ -129,6 +140,10 @@ export async function updateSettingsAction(hypcheckId: string, formData: FormDat
   const { viewer } = await requireHypcheckAccess(hypcheckId, "editor");
   const log = actionLogger("updateSettings", { userId: viewer.id, hypcheckId });
   await log.span("action.updateSettings", async () => {
+    // The settings form edits names comma-separated; preserve the stored
+    // reason for any name that survives the edit.
+    const current = await getHypcheck(hypcheckId);
+    const reasonByName = new Map((current?.watchlist ?? []).map((w) => [w.name.toLowerCase(), w.reason]));
     const watchlistRaw = String(formData.get("watchlist") ?? "");
     await updateHypcheckSettings(hypcheckId, {
       name: String(formData.get("name") ?? "").trim() || undefined,
@@ -138,7 +153,8 @@ export async function updateSettingsAction(hypcheckId: string, formData: FormDat
       watchlist: watchlistRaw
         .split(",")
         .map((s) => s.trim())
-        .filter(Boolean),
+        .filter(Boolean)
+        .map((name) => ({ name, reason: reasonByName.get(name.toLowerCase()) ?? "" })),
     });
     revalidatePath("/", "layout");
     redirect(`/hypcheck/${hypcheckId}`);

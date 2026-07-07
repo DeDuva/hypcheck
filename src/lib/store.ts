@@ -11,14 +11,26 @@ import type {
   InsightDirection,
   Metric,
   MetricScore,
+  RefinementNotes,
   Run,
   RunResult,
   RunTelemetry,
   VersionSource,
+  WatchlistChange,
+  WatchlistEntry,
 } from "./types";
 import { CADENCE_DAYS } from "./types";
 
 type Row = Record<string, unknown>;
+
+/** Watchlists stored before phase 3 are plain string arrays — normalize both
+ * shapes to WatchlistEntry so callers never see the difference. */
+function parseWatchlist(json: string): WatchlistEntry[] {
+  const raw = JSON.parse(json || "[]") as Array<string | { name?: string; reason?: string }>;
+  return raw
+    .map((e) => (typeof e === "string" ? { name: e, reason: "" } : { name: e.name ?? "", reason: e.reason ?? "" }))
+    .filter((e) => e.name);
+}
 
 function rowToHypcheck(r: Row): Hypcheck {
   return {
@@ -27,10 +39,11 @@ function rowToHypcheck(r: Row): Hypcheck {
     status: r.status as Hypcheck["status"],
     cadence: r.cadence as Cadence,
     depth: r.depth as Depth,
-    watchlist: JSON.parse((r.watchlist as string) || "[]"),
+    watchlist: parseWatchlist(r.watchlist as string),
     createdAt: r.created_at as string,
     nextRunAt: (r.next_run_at as string) ?? null,
     ownerId: (r.owner_id as string) ?? null,
+    refinement: r.refinement ? (JSON.parse(r.refinement as string) as RefinementNotes) : null,
   };
 }
 
@@ -113,6 +126,9 @@ function rowToInsight(r: Row): Insight {
     body: r.body as string,
     direction: r.direction as InsightDirection,
     proposedRevision: (r.proposed_revision as string) ?? null,
+    proposedWatchlistChange: r.proposed_watchlist_change
+      ? (JSON.parse(r.proposed_watchlist_change as string) as WatchlistChange)
+      : null,
     status: r.status as Insight["status"],
     createdAt: r.created_at as string,
   };
@@ -155,8 +171,9 @@ export interface CreateHypcheckInput {
   statement: string;
   cadence: Cadence;
   depth: Depth;
-  watchlist: string[];
+  watchlist: WatchlistEntry[];
   metrics: Array<{ name: string; description: string; weight: number; signals?: string; direction?: string }>;
+  refinement?: RefinementNotes | null;
 }
 
 export async function createHypcheck(input: CreateHypcheckInput, ownerId: string): Promise<Hypcheck> {
@@ -164,9 +181,19 @@ export async function createHypcheck(input: CreateHypcheckInput, ownerId: string
   const id = newId();
   const now = new Date().toISOString();
   await db.execute({
-    sql: `INSERT INTO hypchecks (id, name, status, cadence, depth, watchlist, created_at, next_run_at, owner_id)
-          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
-    args: [id, input.name, input.cadence, input.depth, JSON.stringify(input.watchlist), now, now, ownerId],
+    sql: `INSERT INTO hypchecks (id, name, status, cadence, depth, watchlist, created_at, next_run_at, owner_id, refinement)
+          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id,
+      input.name,
+      input.cadence,
+      input.depth,
+      JSON.stringify(input.watchlist),
+      now,
+      now,
+      ownerId,
+      input.refinement ? JSON.stringify(input.refinement) : null,
+    ],
   });
   await db.execute({
     sql: `INSERT INTO hypothesis_versions (id, hypcheck_id, version, statement, change_summary, source, created_at)
@@ -184,7 +211,7 @@ export async function createHypcheck(input: CreateHypcheckInput, ownerId: string
 
 export async function updateHypcheckSettings(
   id: string,
-  patch: { name?: string; cadence?: Cadence; depth?: Depth; watchlist?: string[]; status?: "active" | "paused" }
+  patch: { name?: string; cadence?: Cadence; depth?: Depth; watchlist?: WatchlistEntry[]; status?: "active" | "paused" }
 ): Promise<void> {
   const db = await getDb();
   const current = await getHypcheck(id);
@@ -503,9 +530,19 @@ export async function recordRun(
       ],
     },
     ...result.insights.map((ins) => ({
-      sql: `INSERT INTO insights (id, run_id, hypcheck_id, title, body, direction, proposed_revision, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?)`,
-      args: [newId(), runId, hypcheckId, ins.title, ins.body, ins.direction, ins.proposedRevision, at],
+      sql: `INSERT INTO insights (id, run_id, hypcheck_id, title, body, direction, proposed_revision, proposed_watchlist_change, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)`,
+      args: [
+        newId(),
+        runId,
+        hypcheckId,
+        ins.title,
+        ins.body,
+        ins.direction,
+        ins.proposedRevision,
+        ins.proposedWatchlistChange ? JSON.stringify(ins.proposedWatchlistChange) : null,
+        at,
+      ],
     })),
   ];
   await db.batch(statements, "write");
@@ -569,10 +606,23 @@ export async function setInsightStatus(id: string, status: Insight["status"]): P
 export async function countPendingProposals(hypcheckId: string): Promise<number> {
   const db = await getDb();
   const res = await db.execute({
-    sql: "SELECT COUNT(*) AS c FROM insights WHERE hypcheck_id = ? AND status = 'new' AND proposed_revision IS NOT NULL",
+    sql: `SELECT COUNT(*) AS c FROM insights
+          WHERE hypcheck_id = ? AND status = 'new'
+            AND (proposed_revision IS NOT NULL OR proposed_watchlist_change IS NOT NULL)`,
     args: [hypcheckId],
   });
   return Number((res.rows[0] as Row).c ?? 0);
+}
+
+/** Apply an accepted watchlist change to the hypcheck. Idempotent: re-adding
+ * an existing name updates its reason; removing a missing name is a no-op. */
+export async function applyWatchlistChange(hypcheckId: string, change: WatchlistChange): Promise<void> {
+  const hypcheck = await getHypcheck(hypcheckId);
+  if (!hypcheck) throw new Error("Hypcheck not found");
+  const rest = hypcheck.watchlist.filter((w) => w.name.toLowerCase() !== change.name.toLowerCase());
+  const watchlist =
+    change.action === "add" ? [...rest, { name: change.name, reason: change.reason }] : rest;
+  await updateHypcheckSettings(hypcheckId, { watchlist });
 }
 
 // ---------------------------------------------------------------------------

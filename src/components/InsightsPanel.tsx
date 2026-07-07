@@ -22,7 +22,7 @@ export function InsightCard({
   showActions?: boolean;
 }) {
   const meta = DIRECTION_META[insight.direction];
-  const isPendingProposal = insight.status === "new" && insight.proposedRevision;
+  const isPendingProposal = insight.status === "new" && (insight.proposedRevision || insight.proposedWatchlistChange);
 
   return (
     <div
@@ -37,7 +37,7 @@ export function InsightCard({
           </span>
           {insight.status === "accepted" && (
             <span className="rounded-full bg-iris-soft px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-iris">
-              Accepted → new version
+              {insight.proposedWatchlistChange ? "Accepted → watchlist updated" : "Accepted → new version"}
             </span>
           )}
           {insight.status === "dismissed" && (
@@ -88,7 +88,39 @@ export function InsightCard({
         </div>
       )}
 
-      {insight.status === "new" && !insight.proposedRevision && showActions && (
+      {insight.proposedWatchlistChange && (
+        <div className="mt-3 rounded-lg border border-edge bg-surface p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Proposed watchlist change</p>
+          <p className="mt-1.5 text-[13px] text-ink">
+            <span className="font-medium">{insight.proposedWatchlistChange.action === "add" ? "Add" : "Remove"}</span>{" "}
+            <span className="rounded-full bg-paper px-2 py-0.5 text-[12px] font-medium text-ink-soft ring-1 ring-inset ring-edge">
+              {insight.proposedWatchlistChange.name}
+            </span>
+          </p>
+          {isPendingProposal && showActions && (
+            <div className="mt-3 flex items-center gap-2">
+              <form action={acceptInsightAction.bind(null, insight.id)}>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-iris px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-iris-deep"
+                >
+                  {insight.proposedWatchlistChange.action === "add" ? "Add to watchlist" : "Remove from watchlist"}
+                </button>
+              </form>
+              <form action={dismissInsightAction.bind(null, insight.id)}>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-surface px-3 py-1.5 text-[12px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper"
+                >
+                  Dismiss
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
+
+      {insight.status === "new" && !insight.proposedRevision && !insight.proposedWatchlistChange && showActions && (
         <form action={dismissInsightAction.bind(null, insight.id)} className="mt-2.5">
           <button
             type="submit"

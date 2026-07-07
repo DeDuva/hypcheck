@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS hypchecks (
   watchlist TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
   next_run_at TEXT,
-  owner_id TEXT REFERENCES "user"(id)
+  owner_id TEXT REFERENCES "user"(id),
+  refinement TEXT
 );
 CREATE TABLE IF NOT EXISTS hypcheck_access (
   id TEXT PRIMARY KEY,
@@ -81,6 +82,7 @@ CREATE TABLE IF NOT EXISTS insights (
   body TEXT NOT NULL,
   direction TEXT NOT NULL DEFAULT 'watch',
   proposed_revision TEXT,
+  proposed_watchlist_change TEXT,
   status TEXT NOT NULL DEFAULT 'new',
   created_at TEXT NOT NULL
 );
@@ -161,10 +163,14 @@ const MIGRATIONS: Record<string, Record<string, string>> = {
   },
   hypchecks: {
     owner_id: "TEXT",
+    refinement: "TEXT",
   },
   metrics: {
     signals: "TEXT NOT NULL DEFAULT ''",
     direction: "TEXT NOT NULL DEFAULT ''",
+  },
+  insights: {
+    proposed_watchlist_change: "TEXT",
   },
   user: {
     role: "TEXT NOT NULL DEFAULT 'member'",

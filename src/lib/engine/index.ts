@@ -1,4 +1,4 @@
-import type { Hypcheck, PriorRunDigest, RefineResult, Run } from "../types";
+import type { Hypcheck, PriorRunDigest, RefineAnswer, RefineResult, Run } from "../types";
 import { currentVersion, latestRun, listInsights, listMetrics, recordRun, setLastRunAttempt, setNextRun, type RunAttempt } from "../store";
 import { engineInfo, liveEngineAvailable, liveRefine, liveRun } from "./claude";
 import { simulateRun } from "./simulate";
@@ -142,11 +142,21 @@ function heuristicRefine(statement: string): RefineResult {
   const hasUser = /\b(for|targeting|aimed at|used by)\b/i.test(trimmed);
   const hasProblem = /\b(because|struggle|pain|problem|waste|lack|fail|slow|cost)\b/i.test(trimmed);
   const hasMoney = /\b(pay|price|budget|spend|\$|subscription|per seat|willing)\b/i.test(trimmed);
+  const hasTime = /\b(within|by (q[1-4]|20\d\d)|in \d+ (weeks?|months?|quarters?)|per (week|month))\b/i.test(trimmed);
+  const hasCompetitor = /\b(unlike|vs\.?|versus|instead of|compared to|incumbent)\b/i.test(trimmed) || /[A-Z][a-z]+[A-Z]/.test(trimmed);
 
   const gaps: string[] = [];
   if (!hasUser) gaps.push("it does not name a specific target user or segment");
   if (!hasProblem) gaps.push("the underlying pain point is implied rather than stated");
   if (!hasMoney) gaps.push("it makes no claim about willingness to pay");
+
+  const rubric = [
+    { criterion: "Named target segment", pass: hasUser, fix: hasUser ? null : "Name the specific user segment that has this problem." },
+    { criterion: "Falsifiable claim", pass: hasProblem && hasMoney, fix: hasProblem && hasMoney ? null : "State a claim evidence could disprove — who pays, for what, and why." },
+    { criterion: "Externally observable evidence", pass: hasMoney, fix: hasMoney ? null : "Tie the claim to signals visible on the public web (pricing, launches, hiring, search volume)." },
+    { criterion: "Time-bound / testable", pass: hasTime, fix: hasTime ? null : "Anchor the claim to a horizon so weekly runs can adjudicate it." },
+    { criterion: "Differentiated vs named incumbents", pass: hasCompetitor, fix: hasCompetitor ? null : "Say what incumbents miss — name the closest one." },
+  ];
 
   const critique = gaps.length
     ? `The hypothesis is a reasonable starting point, but ${gaps.join("; ")}. A strong PMF hypothesis names who has the problem, what evidence would prove they care, and what they would give up (money, time, an incumbent tool) to solve it. Tightening these makes the hypothesis falsifiable — which is what lets a tracker like this actually move your conviction over time.`
@@ -159,6 +169,8 @@ function heuristicRefine(statement: string): RefineResult {
   return {
     critique,
     refinedStatement,
+    rubric,
+    clarifyingQuestions: [],
     suggestedMetrics: [
       {
         name: "Demand signal",
@@ -203,12 +215,13 @@ function heuristicRefine(statement: string): RefineResult {
 
 export async function refineHypothesis(
   statement: string,
+  answers: RefineAnswer[] = [],
   parentLog: Logger = logger
 ): Promise<RefineResult & { mode: "live" | "heuristic" }> {
   const log = parentLog.child({ op: "refine" });
   if (liveEngineAvailable()) {
     try {
-      const result = await liveRefine(statement, log);
+      const result = await liveRefine(statement, answers, log);
       return { ...result, mode: "live" };
     } catch (err) {
       log.warn("engine.refine.fallback", { err: serializeError(err) });

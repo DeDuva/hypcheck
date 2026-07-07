@@ -31,6 +31,8 @@ Runs enforce an evidence-freshness discipline — phase 1 of the [signal-quality
 
 Metrics are **external-only** (phase 2): every metric must be assessable purely from public web sources (press releases, funding news, launches, pricing pages, job postings, search/community trends) — nothing that needs internal data like revenue, deals, or customer calls. Each metric carries `signals` (the public evidence a run looks for) and `direction` (what up vs. down looks like), the AI refinement validates candidates against this bar (rejects are shown with reasons, never dropped silently), and the wizard warns when a hand-written metric looks internal.
 
+Hypothesis authoring is a **grounded studio** (phase 3): "Refine with AI" now researches the current market via web search before critiquing, scores the draft against a five-check rubric (named segment · falsifiable · externally observable · time-bound · differentiated), and may ask up to two clarifying questions that power one refine-again round. The critique + rubric persist with the hypcheck (shown on Settings). Watchlist entries carry a *reason* ("closest incumbent for the same JTBD"), which runs use to target their checks — and runs can propose watchlist adds/removes, accepted or dismissed from the insights feed like hypothesis revisions.
+
 ## Run locally
 
 ```bash
