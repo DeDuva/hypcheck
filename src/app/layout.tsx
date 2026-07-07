@@ -63,15 +63,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </svg>
                 Dashboard
               </Link>
-              <Link
-                href="/new"
-                className="mt-0.5 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13.5px] font-medium text-ink-soft transition-colors hover:bg-paper hover:text-ink"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                  <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                New hypcheck
-              </Link>
+              {viewer.role !== "member" && (
+                <Link
+                  href="/new"
+                  className="mt-0.5 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13.5px] font-medium text-ink-soft transition-colors hover:bg-paper hover:text-ink"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  New hypcheck
+                </Link>
+              )}
               {viewer.role === "admin" && (
                 <Link
                   href="/admin"
