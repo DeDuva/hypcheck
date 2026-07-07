@@ -46,9 +46,33 @@ async function main() {
   };
 
   const metrics: Metric[] = [
-    { id: "m1", hypcheckId: "probe", name: "Demand signal", description: "Search volume and community discussion indicating solo consultants actively feel this problem.", weight: 5 },
-    { id: "m2", hypcheckId: "probe", name: "Willingness to pay", description: "Evidence of budget at the $30+/mo tier for adjacent tools.", weight: 4 },
-    { id: "m3", hypcheckId: "probe", name: "Competitive whitespace", description: "How directly incumbents cover 'call -> branded deliverable' vs. plain transcription.", weight: 4 },
+    {
+      id: "m1",
+      hypcheckId: "probe",
+      name: "Demand signal",
+      description: "Search volume and community discussion indicating solo consultants actively feel this problem.",
+      weight: 5,
+      signals: "Search-trend movement, consultant community threads, posts describing manual deliverable workflows.",
+      direction: "Up: rising discussion of the pain. Down: chatter says transcription alone is good enough.",
+    },
+    {
+      id: "m2",
+      hypcheckId: "probe",
+      name: "Willingness to pay",
+      description: "Evidence of budget at the $30+/mo tier for adjacent tools.",
+      weight: 4,
+      signals: "Pricing pages of adjacent tools, plan-tier changes, paid-tier launches in the category.",
+      direction: "Up: adjacent tools sustain or raise $30+/mo tiers. Down: category pricing collapses toward free.",
+    },
+    {
+      id: "m3",
+      hypcheckId: "probe",
+      name: "Competitive whitespace",
+      description: "How directly incumbents cover 'call -> branded deliverable' vs. plain transcription.",
+      weight: 4,
+      signals: "Feature launches and changelogs from notetaker incumbents targeting deliverable generation.",
+      direction: "Up: the deliverable job stays unserved. Down: an incumbent ships branded-deliverable output.",
+    },
   ];
 
   const t0 = Date.now();

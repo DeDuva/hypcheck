@@ -225,7 +225,11 @@ export async function liveRun(
     version.statement,
     ``,
     `## Signal metrics to assess (score each 0-100)`,
-    ...metrics.map((m) => `- **${m.name}** (weight ${m.weight}/5): ${m.description}`),
+    EXTERNAL_ONLY_RULE,
+    ...metrics.map(
+      (m) =>
+        `- **${m.name}** (weight ${m.weight}/5): ${m.description}${m.signals ? ` Evidence to look for: ${m.signals}.` : ""}${m.direction ? ` Scoring direction: ${m.direction}.` : ""}`
+    ),
     ``,
     hypcheck.watchlist.length
       ? `## Watchlist — check each for recent moves relevant to the hypothesis\n${hypcheck.watchlist.map((w) => `- ${w}`).join("\n")}`
@@ -441,8 +445,32 @@ const REFINE_SCHEMA = {
           name: { type: "string", description: "Short metric name, e.g. 'Demand signal'" },
           description: { type: "string", description: "What evidence this metric tracks and why it matters for PMF" },
           weight: { type: "integer", description: "Importance 1-5" },
+          signals: {
+            type: "string",
+            description:
+              "The concrete PUBLIC evidence a run should look for, e.g. 'funding announcements, launch posts, pricing-page changes, job postings for the workflow, search/community volume'",
+          },
+          direction: {
+            type: "string",
+            description:
+              "What a score-up vs score-down observation looks like, so week-over-week scoring stays consistent, e.g. 'Up: new entrants raise; Down: incumbent bundles the feature for free'",
+          },
         },
-        required: ["name", "description", "weight"],
+        required: ["name", "description", "weight", "signals", "direction"],
+        additionalProperties: false,
+      },
+    },
+    rejectedMetrics: {
+      type: "array",
+      description:
+        "Candidate metrics you considered but rejected because they fail the external-observability or freshness test — never silently drop one",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          reason: { type: "string", description: "One line: why no run could observe this from public sources at cadence" },
+        },
+        required: ["name", "reason"],
         additionalProperties: false,
       },
     },
@@ -452,9 +480,17 @@ const REFINE_SCHEMA = {
       description: "4-6 real companies, products, or competitive signals to monitor",
     },
   },
-  required: ["critique", "refinedStatement", "suggestedMetrics", "suggestedWatchlist"],
+  required: ["critique", "refinedStatement", "suggestedMetrics", "rejectedMetrics", "suggestedWatchlist"],
   additionalProperties: false,
 } as const;
+
+/** The external-only measurement constraint, stated identically in the refine
+ * and run prompts. Hypchecks never see internal data — a metric that needs it
+ * can never be scored. */
+export const EXTERNAL_ONLY_RULE = [
+  `Metrics must be assessable purely from public web sources: press releases, funding news, product launches, pricing pages, job postings, search/community trends, analyst coverage.`,
+  `Never propose or lean on anything requiring internal data — revenue, pipeline, deals, customer calls, NPS, churn, active users — unless it's the kind of thing that would appear in a press release.`,
+].join(" ");
 
 export async function liveRefine(statement: string, log: Logger = rootLogger): Promise<RefineResult> {
   const anthropic = client();
@@ -466,7 +502,18 @@ export async function liveRefine(statement: string, log: Logger = rootLogger): P
     messages: [
       {
         role: "user",
-        content: `You are a seasoned product strategy advisor. A product manager has drafted this product hypothesis:\n\n"${statement}"\n\nCritique it, rewrite it to be sharp and falsifiable, propose 4-5 weighted signal metrics for tracking product-market fit over time, and suggest a competitive watchlist.`,
+        content: [
+          `You are a seasoned product strategy advisor. A product manager has drafted this product hypothesis:`,
+          ``,
+          `"${statement}"`,
+          ``,
+          `Critique it, rewrite it to be sharp and falsifiable, propose 4-5 weighted signal metrics for tracking product-market fit over time, and suggest a competitive watchlist.`,
+          ``,
+          `## Metric constraint (hard rule)`,
+          EXTERNAL_ONLY_RULE,
+          `For each suggested metric, also specify \`signals\` (the concrete public evidence a run should look for) and \`direction\` (what a score-up vs score-down observation looks like).`,
+          `Validate every candidate metric before suggesting it: (1) is it observable from public sources only? (2) will fresh evidence realistically appear at a weekly-to-monthly tracking cadence? Candidates that fail either test go in \`rejectedMetrics\` with a one-line reason — never silently drop one.`,
+        ].join("\n"),
       },
     ],
   });

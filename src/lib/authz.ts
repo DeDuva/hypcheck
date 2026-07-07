@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { auth, devOpenMode, isEmailAllowed } from "./auth";
-import { getAccessGrant, getHypcheck } from "./store";
+import { ensureUserRow, getAccessGrant, getHypcheck } from "./store";
 import type { GlobalRole, Hypcheck } from "./types";
 import { logger } from "./logger";
 
@@ -16,9 +16,25 @@ export interface Viewer {
 
 const DEV_VIEWER: Viewer = { id: "local-dev", email: "dev@localhost", name: "Local dev", image: null, role: "admin" };
 
+// Once per process: hypchecks.owner_id FK-references "user"(id), so the
+// synthetic dev viewer must exist as a real row before it can own anything.
+let devUserEnsured: Promise<void> | null = null;
+function ensureDevUser(): Promise<void> {
+  if (!devUserEnsured) {
+    devUserEnsured = ensureUserRow(DEV_VIEWER).catch((err) => {
+      devUserEnsured = null; // retry on next request rather than caching the failure
+      throw err;
+    });
+  }
+  return devUserEnsured;
+}
+
 /** Resolve the current session to a Viewer, or null when not signed in. */
 export async function getViewer(): Promise<Viewer | null> {
-  if (devOpenMode) return DEV_VIEWER;
+  if (devOpenMode) {
+    await ensureDevUser();
+    return DEV_VIEWER;
+  }
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return null;
   // Re-check the invite list on every read so removing an email revokes

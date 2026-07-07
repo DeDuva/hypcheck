@@ -322,6 +322,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
                     <span className="font-medium text-ink">{m.name}</span>
                     <span className="text-ink-faint"> · weight {m.weight}/5</span>
                     <p className="text-ink-soft">{m.description}</p>
+                    {m.signals && <p className="text-[12px] text-ink-faint">Watches: {m.signals}</p>}
                   </li>
                 ))}
               </ul>
