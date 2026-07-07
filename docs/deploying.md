@@ -74,9 +74,10 @@ where prod is either open or bricked:
   rollback safe, because rolling back code never requires rolling back the
   database.
 - **Backward-compatible access defaults.** A deploy must never strip the
-  people already using the app: when roles land (phase 2), everyone on
-  `ALLOWED_EMAILS` bootstraps as admin; only newly invited users start at
-  least-privilege.
+  people already using the app: phase 2's rollout backfilled everyone
+  already on `ALLOWED_EMAILS` to admin as a one-time migration, so existing
+  access didn't regress. That backfill has run; new signups now start at
+  least-privilege (`member`) from the moment they sign up.
 - **Shadow mode before enforcement.** New permission checks ship behind
   `HYPCHECK_ENFORCE_ROLES=log` first: would-be denials are logged but
   allowed. Watch prod logs for a few days, confirm nothing legitimate would
