@@ -1,6 +1,6 @@
 # Signal Quality Plan
 
-**Status: phases 1 (freshness discipline + carry-forward) and 2 (external-only metric model) implemented; phases 3–4 not started.** As each phase ships, mark it here and add/update the corresponding line in the README's "Signal quality" section.
+**Status: phases 1 (freshness discipline + carry-forward), 2 (external-only metric model), and 3 (grounded hypothesis studio + watchlist with intent) implemented; phase 4 (thought-leader run posture) not started.** As each phase ships, mark it here and add/update the corresponding line in the README's "Signal quality" section.
 
 > Note: "phase" numbers in this doc are the signal-quality track. They are unrelated to the access-control phases (auth wall / roles / sharing) already referenced in the README.
 

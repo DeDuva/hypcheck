@@ -43,8 +43,10 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
     carriedForward: r.metricScores.length > 0 && r.metricScores.every((ms) => ms.carriedForward),
   }));
 
-  const pendingProposals = insights.filter((i) => i.status === "new" && i.proposedRevision);
-  const otherInsights = insights.filter((i) => !(i.status === "new" && i.proposedRevision)).slice(0, 8);
+  const pendingProposals = insights.filter((i) => i.status === "new" && (i.proposedRevision || i.proposedWatchlistChange));
+  const otherInsights = insights
+    .filter((i) => !(i.status === "new" && (i.proposedRevision || i.proposedWatchlistChange)))
+    .slice(0, 8);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10 lg:px-10">
@@ -332,10 +334,13 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {hypcheck.watchlist.map((w) => (
                       <span
-                        key={w}
-                        className="rounded-full bg-paper px-2.5 py-1 text-[12px] font-medium text-ink-soft ring-1 ring-inset ring-edge"
+                        key={w.name}
+                        title={w.reason || undefined}
+                        className={`rounded-full bg-paper px-2.5 py-1 text-[12px] font-medium text-ink-soft ring-1 ring-inset ring-edge ${
+                          w.reason ? "cursor-help" : ""
+                        }`}
                       >
-                        {w}
+                        {w.name}
                       </span>
                     ))}
                   </div>

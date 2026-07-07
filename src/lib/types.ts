@@ -42,16 +42,45 @@ export interface IndustryAnalysis {
   implications: string; // the "so what" for this hypothesis
 }
 
+/** A watchlist entry: a real company/product/signal plus WHY it's watched —
+ * the reason is what makes run-time checks targeted rather than generic. */
+export interface WatchlistEntry {
+  name: string;
+  reason: string; // e.g. "closest incumbent for the same JTBD"; empty on pre-feature entries
+}
+
+/** A run-proposed watchlist edit, accepted/dismissed like a hypothesis revision. */
+export interface WatchlistChange {
+  action: "add" | "remove";
+  name: string;
+  reason: string;
+}
+
+/** One check of the hypothesis-quality rubric the AI refinement applies. */
+export interface RubricCheck {
+  criterion: string;
+  pass: boolean;
+  fix: string | null; // one-line fix when the check fails
+}
+
+/** The refinement critique + rubric persisted with a hypcheck — the standing
+ * definition of what "testing this hypothesis" means. */
+export interface RefinementNotes {
+  critique: string;
+  rubric: RubricCheck[];
+}
+
 export interface Hypcheck {
   id: string;
   name: string;
   status: "active" | "paused";
   cadence: Cadence;
   depth: Depth;
-  watchlist: string[]; // companies, products, competitive signals
+  watchlist: WatchlistEntry[]; // companies, products, competitive signals — with reasons
   createdAt: string; // ISO
   nextRunAt: string | null; // ISO
   ownerId: string | null; // null on hypchecks created before phase 2 (grandfathered, shared access)
+  refinement: RefinementNotes | null; // null when created without AI refinement (or pre-feature)
 }
 
 export interface HypcheckAccessGrant {
@@ -144,6 +173,7 @@ export interface Insight {
   body: string;
   direction: InsightDirection;
   proposedRevision: string | null; // full replacement hypothesis statement
+  proposedWatchlistChange: WatchlistChange | null; // run-proposed watchlist add/remove
   status: InsightStatus;
   createdAt: string;
 }
@@ -161,6 +191,7 @@ export interface RunResult {
     body: string;
     direction: InsightDirection;
     proposedRevision: string | null;
+    proposedWatchlistChange?: WatchlistChange | null;
   }>;
 }
 
@@ -178,12 +209,24 @@ export interface PriorRunDigest {
 export interface RefineResult {
   critique: string;
   refinedStatement: string;
+  /** Five pass/fail checks: named segment · falsifiable claim · externally
+   * observable evidence · time-bound/testable · differentiated vs incumbents. */
+  rubric: RubricCheck[];
+  /** 0-2 questions, asked only when research can't resolve an ambiguity in the
+   * author's directional intent. Answering them powers one refine-again round. */
+  clarifyingQuestions: string[];
   suggestedMetrics: Array<{ name: string; description: string; weight: number; signals: string; direction: string }>;
   /** Candidate metrics the validator rejected (need internal data, or fresh
    * public evidence won't realistically appear at tracking cadence). Surfaced
    * to the user as a quiet explanation, never silently dropped. */
   rejectedMetrics: Array<{ name: string; reason: string }>;
-  suggestedWatchlist: string[];
+  suggestedWatchlist: WatchlistEntry[];
+}
+
+/** A user's answer to one clarifying question, fed into the second refine round. */
+export interface RefineAnswer {
+  question: string;
+  answer: string;
 }
 
 export const SCORE_BANDS = [

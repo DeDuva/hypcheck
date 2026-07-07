@@ -28,10 +28,15 @@ async function main() {
     status: "active",
     cadence: "weekly",
     depth: "brief", // brief = at most 3 searches, keeps the probe fast/cheap
-    watchlist: ["Otter.ai", "Fathom", "Granola"],
+    watchlist: [
+      { name: "Otter.ai", reason: "incumbent transcription leader most likely to add deliverable output" },
+      { name: "Fathom", reason: "free notetaker absorbing the low end of the market" },
+      { name: "Granola", reason: "newest entrant closest to the structured-notes JTBD" },
+    ],
     createdAt: new Date().toISOString(),
     nextRunAt: null,
     ownerId: null,
+    refinement: null,
   };
 
   const version: HypothesisVersion = {

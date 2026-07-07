@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { createHypcheckAction, refineAction } from "@/lib/actions";
-import type { Cadence, Depth, RefineResult } from "@/lib/types";
+import type { Cadence, Depth, RefineResult, WatchlistEntry } from "@/lib/types";
 import { CADENCE_LABELS, DEPTH_LABELS } from "@/lib/types";
 
 interface MetricDraft {
@@ -65,26 +65,36 @@ export function Wizard() {
   const [statement, setStatement] = useState("");
   const [refine, setRefine] = useState<(RefineResult & { mode: "live" | "heuristic" }) | null>(null);
   const [refining, startRefine] = useTransition();
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [answeredRound, setAnsweredRound] = useState(false); // one clarifying round max
   const [metrics, setMetrics] = useState<MetricDraft[]>(DEFAULT_METRICS);
   const [cadence, setCadence] = useState<Cadence>("weekly");
   const [depth, setDepth] = useState<Depth>("standard");
-  const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistEntry[]>([]);
   const [watchInput, setWatchInput] = useState("");
   const [creating, startCreate] = useTransition();
 
   const canNext = step === 0 ? name.trim().length > 1 && statement.trim().length > 20 : step === 1 ? metrics.length > 0 : true;
 
-  function handleRefine() {
+  function handleRefine(withAnswers = false) {
+    const answerPayload =
+      withAnswers && refine
+        ? refine.clarifyingQuestions.map((q, i) => ({ question: q, answer: answers[i] ?? "" })).filter((a) => a.answer.trim())
+        : [];
+    if (withAnswers) setAnsweredRound(true);
     startRefine(async () => {
-      const result = await refineAction(statement);
+      const result = await refineAction(statement, answerPayload);
       setRefine(result);
+      setAnswers([]);
       if (result.suggestedMetrics.length) setMetrics(result.suggestedMetrics.map((m) => ({ ...m, vetted: true })));
     });
   }
 
-  function addWatch(term: string) {
-    const t = term.trim();
-    if (t && !watchlist.includes(t)) setWatchlist((w) => [...w, t]);
+  function addWatch(entry: WatchlistEntry) {
+    const name = entry.name.trim();
+    if (name && !watchlist.some((w) => w.name.toLowerCase() === name.toLowerCase())) {
+      setWatchlist((w) => [...w, { name, reason: entry.reason }]);
+    }
     setWatchInput("");
   }
 
@@ -103,6 +113,7 @@ export function Wizard() {
           signals: m.signals.trim(),
           direction: m.direction.trim(),
         })),
+        refinement: refine ? { critique: refine.critique, rubric: refine.rubric } : null,
       });
     });
   }
@@ -169,7 +180,7 @@ export function Wizard() {
             <div className="flex items-center justify-between">
               <button
                 type="button"
-                onClick={handleRefine}
+                onClick={() => handleRefine()}
                 disabled={refining || statement.trim().length < 20}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-iris-soft px-3.5 py-2 text-[13px] font-medium text-iris transition-colors hover:bg-iris-soft/70 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -179,7 +190,7 @@ export function Wizard() {
                       <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
                       <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                     </svg>
-                    Refining…
+                    Researching the market…
                   </>
                 ) : (
                   <>
@@ -190,14 +201,36 @@ export function Wizard() {
                   </>
                 )}
               </button>
+              {refining && (
+                <span className="text-[11.5px] text-ink-faint">
+                  Grounding the critique in current market research — up to a minute or two.
+                </span>
+              )}
             </div>
 
-            {refine && (
+            {refine && !refining && (
               <div className="rounded-xl border border-iris/20 bg-iris-soft/40 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-iris">
                   Critique {refine.mode === "heuristic" && "· structural check (set ANTHROPIC_API_KEY for full AI refinement)"}
                 </p>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{refine.critique}</p>
+
+                {refine.rubric.length > 0 && (
+                  <ul className="mt-3 space-y-1">
+                    {refine.rubric.map((check) => (
+                      <li key={check.criterion} className="flex items-start gap-2 text-[12.5px]">
+                        <span className={check.pass ? "text-emerald-600" : "text-amber-600"} aria-hidden>
+                          {check.pass ? "✓" : "✗"}
+                        </span>
+                        <span>
+                          <span className="font-medium text-ink">{check.criterion}</span>
+                          {!check.pass && check.fix && <span className="text-ink-faint"> — {check.fix}</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
                 {refine.refinedStatement.trim() !== statement.trim() && (
                   <>
                     <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-iris">Sharper framing</p>
@@ -210,6 +243,41 @@ export function Wizard() {
                       Use this framing
                     </button>
                   </>
+                )}
+
+                {refine.clarifyingQuestions.length > 0 && !answeredRound && (
+                  <div className="mt-4 border-t border-iris/15 pt-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-iris">
+                      The advisor needs your call on {refine.clarifyingQuestions.length === 1 ? "one thing" : "a couple of things"}
+                    </p>
+                    <div className="mt-2 space-y-2.5">
+                      {refine.clarifyingQuestions.map((q, i) => (
+                        <div key={q}>
+                          <p className="text-[12.5px] leading-relaxed text-ink">{q}</p>
+                          <input
+                            value={answers[i] ?? ""}
+                            onChange={(e) =>
+                              setAnswers((a) => {
+                                const next = [...a];
+                                next[i] = e.target.value;
+                                return next;
+                              })
+                            }
+                            placeholder="Your answer"
+                            className="mt-1 w-full rounded-lg border border-edge bg-surface px-2.5 py-1.5 text-[12.5px] outline-none focus:border-iris"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRefine(true)}
+                      disabled={!answers.some((a) => a?.trim())}
+                      className="mt-2.5 rounded-lg bg-iris-soft px-3 py-1.5 text-[12px] font-medium text-iris ring-1 ring-inset ring-iris/20 transition-colors hover:bg-iris-soft/70 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Refine again with my answers
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -363,14 +431,15 @@ export function Wizard() {
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg border border-edge bg-paper/50 px-2 py-1.5 focus-within:border-iris focus-within:bg-surface">
                 {watchlist.map((w) => (
                   <span
-                    key={w}
+                    key={w.name}
+                    title={w.reason || undefined}
                     className="inline-flex items-center gap-1 rounded-full bg-iris-soft px-2.5 py-1 text-[12px] font-medium text-iris"
                   >
-                    {w}
+                    {w.name}
                     <button
                       type="button"
-                      onClick={() => setWatchlist((ws) => ws.filter((x) => x !== w))}
-                      aria-label={`Remove ${w}`}
+                      onClick={() => setWatchlist((ws) => ws.filter((x) => x.name !== w.name))}
+                      aria-label={`Remove ${w.name}`}
                       className="transition-colors hover:text-iris-deep"
                     >
                       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -386,26 +455,27 @@ export function Wizard() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === ",") {
                       e.preventDefault();
-                      addWatch(watchInput);
+                      addWatch({ name: watchInput, reason: "" });
                     }
                   }}
                   placeholder={watchlist.length ? "" : "e.g. Gong, Clari, Salesforce Einstein Copilot"}
                   className="min-w-[180px] flex-1 bg-transparent px-1.5 py-0.5 text-[13px] outline-none"
                 />
               </div>
-              {refine?.suggestedWatchlist.filter((s) => !watchlist.includes(s)).length ? (
+              {refine?.suggestedWatchlist.filter((s) => !watchlist.some((w) => w.name === s.name)).length ? (
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11.5px] text-ink-faint">Suggested:</span>
+                  <span className="text-[11.5px] text-ink-faint">Suggested (hover for why):</span>
                   {refine.suggestedWatchlist
-                    .filter((s) => !watchlist.includes(s))
+                    .filter((s) => !watchlist.some((w) => w.name === s.name))
                     .map((s) => (
                       <button
-                        key={s}
+                        key={s.name}
                         type="button"
+                        title={s.reason || undefined}
                         onClick={() => addWatch(s)}
                         className="rounded-full bg-surface px-2.5 py-1 text-[12px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-iris-soft hover:text-iris"
                       >
-                        + {s}
+                        + {s.name}
                       </button>
                     ))}
                 </div>
@@ -417,7 +487,7 @@ export function Wizard() {
               <p className="mt-1.5 text-[13px] leading-relaxed text-ink">{statement}</p>
               <p className="mt-2 text-[12px] text-ink-faint">
                 {CADENCE_LABELS[cadence]} · {DEPTH_LABELS[depth]} · {metrics.length} metrics ·{" "}
-                {watchlist.length ? `watching ${watchlist.join(", ")}` : "no watchlist"}
+                {watchlist.length ? `watching ${watchlist.map((w) => w.name).join(", ")}` : "no watchlist"}
               </p>
             </div>
           </div>

@@ -1,6 +1,10 @@
 import { Wizard } from "@/components/Wizard";
 import { requireCanCreateHypcheck } from "@/lib/authz";
 
+// This route hosts refineAction, which now performs grounded (web-searched)
+// refinement — give it headroom past the default function budget.
+export const maxDuration = 300;
+
 export default async function NewHypcheckPage() {
   await requireCanCreateHypcheck();
   return (

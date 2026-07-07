@@ -108,7 +108,7 @@ export default async function SettingsPage({
           <input
             id="watchlist"
             name="watchlist"
-            defaultValue={hypcheck.watchlist.join(", ")}
+            defaultValue={hypcheck.watchlist.map((w) => w.name).join(", ")}
             placeholder="e.g. Gong, Clari, Salesforce Einstein Copilot"
             className="mt-1.5 w-full rounded-lg border border-edge bg-paper/50 px-3 py-2 text-[13.5px] outline-none transition-colors focus:border-iris focus:bg-surface"
           />
@@ -141,6 +141,32 @@ export default async function SettingsPage({
           </button>
         </div>
       </form>
+
+      {hypcheck.refinement && (
+        <div className="mt-5 rounded-2xl border border-edge bg-surface p-6 shadow-card">
+          <h2 className="text-[15px] font-semibold text-ink">Refinement notes</h2>
+          <p className="mt-1 text-[12.5px] text-ink-faint">
+            The AI advisor&apos;s critique from when this hypothesis was authored — the standing definition of what
+            testing it means.
+          </p>
+          <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">{hypcheck.refinement.critique}</p>
+          {hypcheck.refinement.rubric.length > 0 && (
+            <ul className="mt-3.5 space-y-1.5 border-t border-edge pt-3.5">
+              {hypcheck.refinement.rubric.map((check) => (
+                <li key={check.criterion} className="flex items-start gap-2 text-[12.5px]">
+                  <span className={check.pass ? "text-emerald-600" : "text-amber-600"} aria-hidden>
+                    {check.pass ? "✓" : "✗"}
+                  </span>
+                  <span>
+                    <span className="font-medium text-ink">{check.criterion}</span>
+                    {!check.pass && check.fix && <span className="text-ink-faint"> — {check.fix}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="mt-5 rounded-2xl border border-edge bg-surface p-6 shadow-card">
         <h2 className="text-[15px] font-semibold text-ink">Sharing</h2>
