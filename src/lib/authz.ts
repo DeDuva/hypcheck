@@ -79,11 +79,14 @@ const ROLE_RANK: Record<Exclude<EffectiveRole, null>, number> = { viewer: 1, edi
 export async function effectiveHypcheckRole(viewer: Viewer, hypcheck: Hypcheck): Promise<EffectiveRole> {
   if (viewer.role === "admin") return "admin";
   if (hypcheck.ownerId === viewer.id) return "owner";
-  // Hypchecks created before phase 2 have no owner — grandfather them in as
-  // shared/editable so existing users see no behavior change.
-  if (!hypcheck.ownerId) return "editor";
   const grant = await getAccessGrant(hypcheck.id, viewer.id);
-  return grant?.role ?? null;
+  if (grant) return grant.role;
+  // Hypchecks created before phase 2 have no owner and no per-user grants —
+  // grandfather them in as shared/editable so existing users see no behavior
+  // change. An explicit grant (checked above) always wins, so sharing a
+  // legacy ownerless hypcheck as viewer-only actually restricts to viewer.
+  if (!hypcheck.ownerId) return "editor";
+  return null;
 }
 
 /**
