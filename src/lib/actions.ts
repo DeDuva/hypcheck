@@ -10,6 +10,7 @@ import {
   createHypcheck,
   createInvitation,
   deleteHypcheck,
+  getAccessGrant,
   getHypcheck,
   getInsight,
   getUserByEmail,
@@ -208,12 +209,19 @@ export async function grantHypcheckAccessAction(hypcheckId: string, formData: Fo
   redirect(settingsPath);
 }
 
+/** Same grant matrix as granting: an editor may only remove viewer-level
+ * grants; removing an editor takes an owner/admin. */
 export async function revokeHypcheckAccessAction(hypcheckId: string, userId: string): Promise<void> {
-  const { viewer } = await requireHypcheckAccess(hypcheckId, "editor");
+  const { viewer, role } = await requireHypcheckAccess(hypcheckId, "editor");
   const log = actionLogger("revokeAccess", { userId: viewer.id, hypcheckId });
+  const settingsPath = `/hypcheck/${hypcheckId}/settings`;
+  const target = await getAccessGrant(hypcheckId, userId);
+  if (target?.role === "editor" && role !== "admin" && role !== "owner") {
+    redirect(`${settingsPath}?shareError=${encodeURIComponent("Only the owner or an admin can remove an editor")}`);
+  }
   await revokeAccess(hypcheckId, userId);
   log.info("hypcheck.access.revoked", { hypcheckId, targetUserId: userId });
-  revalidatePath(`/hypcheck/${hypcheckId}/settings`);
+  revalidatePath(settingsPath);
 }
 
 /**

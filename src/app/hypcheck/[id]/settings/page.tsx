@@ -190,37 +190,43 @@ export default async function SettingsPage({
                   <p className="text-[13px] font-medium text-ink">{grant.name}</p>
                   <p className="text-[12px] text-ink-faint">{grant.email}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {canGrantEditor || grant.role === "viewer" ? (
+                <div className="flex items-center gap-2.5">
+                  {canGrantEditor ? (
                     <form action={updateAccessRoleAction.bind(null, id, grant.userId)} className="flex items-center gap-1.5">
                       <select
                         name="role"
                         defaultValue={grant.role}
-                        className="rounded-full border-0 bg-paper px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-ink-soft outline-none ring-1 ring-inset ring-edge focus:ring-iris"
+                        className="rounded-md border border-edge bg-paper/50 px-2 py-1 text-[12px] font-medium text-ink-soft outline-none transition-colors focus:border-iris focus:bg-surface"
                       >
                         <option value="viewer">Viewer</option>
-                        {canGrantEditor && <option value="editor">Editor</option>}
+                        <option value="editor">Editor</option>
                       </select>
                       <button
                         type="submit"
-                        className="text-[11.5px] font-medium text-ink-faint transition-colors hover:text-ink"
+                        className="rounded-md px-2.5 py-1 text-[12px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper hover:text-ink"
                       >
                         Update
                       </button>
                     </form>
                   ) : (
+                    // Only the owner/admin can grant editor, so a plain editor
+                    // has no real role choice to offer here (it'd always be
+                    // "viewer", a silent no-op) — show the role read-only
+                    // instead of a select that can't actually change anything.
                     <span className="rounded-full bg-paper px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-ink-soft ring-1 ring-inset ring-edge">
                       {grant.role}
                     </span>
                   )}
-                  <form action={revokeHypcheckAccessAction.bind(null, id, grant.userId)}>
-                    <button
-                      type="submit"
-                      className="text-[12px] font-medium text-ink-faint transition-colors hover:text-rose-600"
-                    >
-                      Remove
-                    </button>
-                  </form>
+                  {(canGrantEditor || grant.role === "viewer") && (
+                    <form action={revokeHypcheckAccessAction.bind(null, id, grant.userId)}>
+                      <button
+                        type="submit"
+                        className="rounded-md px-2.5 py-1 text-[12px] font-medium text-rose-600/80 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                      >
+                        Remove
+                      </button>
+                    </form>
+                  )}
                 </div>
               </li>
             ))}
@@ -230,14 +236,14 @@ export default async function SettingsPage({
                   <p className="text-[13px] font-medium text-ink">{invite.email}</p>
                   <p className="text-[12px] text-ink-faint">Invited — activates on first sign-in</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
                   <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-amber-700 ring-1 ring-inset ring-amber-200">
                     {invite.role}
                   </span>
                   <form action={revokeInvitationAction.bind(null, id, invite.email)}>
                     <button
                       type="submit"
-                      className="text-[12px] font-medium text-ink-faint transition-colors hover:text-rose-600"
+                      className="rounded-md px-2.5 py-1 text-[12px] font-medium text-rose-600/80 transition-colors hover:bg-rose-50 hover:text-rose-700"
                     >
                       Cancel invite
                     </button>
