@@ -67,9 +67,9 @@ Every user has a global role — `admin`, `creator`, or `member` — plus, per h
 
 Grant matrix: only an owner/admin can grant `editor`; an `editor` can grant `viewer`. `member`s cannot create hypchecks. The sharing UI (phase 3) isn't built yet — grants are made via `grantHypcheckAccessAction`/`revokeHypcheckAccessAction` (`src/lib/actions.ts`).
 
-New signups are bootstrapped as `admin` (ALLOWED_EMAILS is still the only invite gate, so this preserves today's full-access-for-everyone behavior); phase 3's admin console will introduce real differentiation.
+New signups are bootstrapped as `member` — least-privilege, no ability to create hypchecks — and get exactly what their per-hypcheck grant or pending invitation says. There's no admin console yet, so promoting someone to `creator`/`admin` is a direct SQL update against the `user` table.
 
-Enforcement ships in **shadow mode**: denials are logged (`authz.hypcheck.denied` / `authz.create.denied`) but not blocked unless `HYPCHECK_ENFORCE_ROLES=enforce` is set. Verify the logs show no unexpected denials before flipping it on.
+Enforcement supports a **shadow mode**: denials are logged (`authz.hypcheck.denied` / `authz.create.denied`) but not blocked unless `HYPCHECK_ENFORCE_ROLES=enforce` is set. Production has `HYPCHECK_ENFORCE_ROLES=enforce` set, so denials are real blocks there.
 
 ## Deploy to Vercel
 
