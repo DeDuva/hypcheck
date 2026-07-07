@@ -241,6 +241,11 @@ export async function updateAccessRoleAction(hypcheckId: string, userId: string,
   await grantAccess(hypcheckId, userId, newRole, viewer.id);
   log.info("hypcheck.access.roleChanged", { hypcheckId, targetUserId: userId, role: newRole });
   revalidatePath(settingsPath);
+  // The role <select> is an uncontrolled element (defaultValue) — an
+  // in-place RSC patch after the action doesn't update its displayed value,
+  // so the UI shows the pre-change role until a real navigation happens.
+  // Force one, same as grantHypcheckAccessAction/updateSettingsAction.
+  redirect(settingsPath);
 }
 
 export async function revokeInvitationAction(hypcheckId: string, email: string): Promise<void> {
