@@ -6,6 +6,7 @@ import type {
   HypothesisVersion,
   Metric,
   PriorRunDigest,
+  RefineAnswer,
   RefineResult,
   RunResult,
   RunTelemetry,
@@ -132,6 +133,21 @@ const RESULT_SCHEMA = {
         additionalProperties: false,
       },
     },
+    watchlistChanges: {
+      type: "array",
+      description:
+        "Proposed watchlist edits (max 2, usually zero): add a newly credible entrant, or remove an entry that is acquired, defunct, or no longer relevant. Only when genuinely warranted by this run's evidence.",
+      items: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["add", "remove"] },
+          name: { type: "string" },
+          reason: { type: "string", description: "One line: why this entry should be added/removed" },
+        },
+        required: ["action", "name", "reason"],
+        additionalProperties: false,
+      },
+    },
     changesSinceLastRun: {
       type: ["string", "null"],
       description:
@@ -155,7 +171,7 @@ const RESULT_SCHEMA = {
       },
     },
   },
-  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes", "changesSinceLastRun", "sources"],
+  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes", "watchlistChanges", "changesSinceLastRun", "sources"],
   additionalProperties: false,
 } as const;
 
@@ -181,6 +197,7 @@ interface StructuredResult {
   risks: string[];
   actions: string[];
   watchlistNotes: Array<{ name: string; note: string }>;
+  watchlistChanges: Array<{ action: "add" | "remove"; name: string; reason: string }>;
   sources: Array<{ title: string; url: string; publishedAt: string | null }>;
 }
 
@@ -232,7 +249,9 @@ export async function liveRun(
     ),
     ``,
     hypcheck.watchlist.length
-      ? `## Watchlist — check each for recent moves relevant to the hypothesis\n${hypcheck.watchlist.map((w) => `- ${w}`).join("\n")}`
+      ? `## Watchlist — check each for recent moves relevant to the hypothesis\n${hypcheck.watchlist
+          .map((w) => `- ${w.name}${w.reason ? ` — watched because: ${w.reason}` : ""}`)
+          .join("\n")}`
       : ``,
     priorSection,
     ``,
@@ -252,8 +271,9 @@ export async function liveRun(
     `- \`insights\`: surface 1-3 insights. Mark each as supporting, challenging, or watch. If an insight genuinely warrants amending the hypothesis, include a complete \`proposedRevision\` of the hypothesis statement; otherwise set it to null.`,
     `- \`risks\` and \`actions\`: key risks and recommended actions for the product manager.`,
     hypcheck.watchlist.length
-      ? `- \`watchlistNotes\`: one entry per watchlist name (exactly: ${hypcheck.watchlist.join(", ")}) noting any recent move relevant to the hypothesis.`
+      ? `- \`watchlistNotes\`: one entry per watchlist name (exactly: ${hypcheck.watchlist.map((w) => w.name).join(", ")}) noting any recent move relevant to the hypothesis, judged against why each is watched.`
       : `- \`watchlistNotes\`: leave as an empty array (no watchlist configured).`,
+    `- \`watchlistChanges\`: usually empty. Propose an edit (max 2) only when this run's evidence genuinely warrants it — a newly credible entrant worth watching (with the reason), or an existing entry that is acquired, defunct, or no longer relevant.`,
     ``,
     `## The industryAnalysis object (write this as a world-class strategy analyst)`,
     `Fill in \`industryAnalysis\` as a sell-side/strategy analyst note for a leadership team. It must be tight — no more than two pages of prose across its fields.`,
@@ -376,6 +396,21 @@ export async function liveRun(
   for (const w of data.watchlistNotes ?? []) watchlistNotes[w.name] = w.note;
 
   const changesSinceLastRun = prior ? data.changesSinceLastRun : null;
+
+  // Watchlist edits ride the existing insight Accept/Dismiss flow: each
+  // proposed change becomes a "watch" insight carrying the structured edit.
+  const watchNames = new Set(hypcheck.watchlist.map((w) => w.name.toLowerCase()));
+  const watchlistChangeInsights = (data.watchlistChanges ?? [])
+    .filter((c) => (c.action === "add" ? !watchNames.has(c.name.toLowerCase()) : watchNames.has(c.name.toLowerCase())))
+    .slice(0, 2)
+    .map((c) => ({
+      title: c.action === "add" ? `Watchlist: add ${c.name}` : `Watchlist: remove ${c.name}`,
+      body: c.reason,
+      direction: "watch" as const,
+      proposedRevision: null,
+      proposedWatchlistChange: c,
+    }));
+  const insights = [...data.insights, ...watchlistChangeInsights];
   // First freshness-gated run on top of pre-freshness history: flag the method
   // change in the report so the trend break is explainable.
   const methodChangeNote = prior != null && prior.metricScores.length > 0 && prior.metricScores.every((ms) => ms.freshness == null);
@@ -394,9 +429,9 @@ export async function liveRun(
     execSummary: data.execSummary,
     industryAnalysis,
     metricScores,
-    watchlist: hypcheck.watchlist,
+    watchlist: hypcheck.watchlist.map((w) => w.name),
     watchlistNotes,
-    insights: data.insights,
+    insights,
     risks: data.risks,
     actions: data.actions,
     sources: Array.isArray(data.sources) ? data.sources : [],
@@ -415,7 +450,7 @@ export async function liveRun(
       metricScores,
       industryAnalysis,
       changesSinceLastRun,
-      insights: data.insights,
+      insights,
     },
     telemetry: {
       inputTokens: research.usage.input_tokens,
@@ -436,6 +471,26 @@ const REFINE_SCHEMA = {
     refinedStatement: {
       type: "string",
       description: "A sharper, falsifiable rewrite of the hypothesis preserving the author's intent",
+    },
+    rubric: {
+      type: "array",
+      description: "The five quality checks applied to the REFINED statement, in this order: named target segment; falsifiable claim; externally observable evidence; time-bound/testable; differentiated vs named incumbents",
+      items: {
+        type: "object",
+        properties: {
+          criterion: { type: "string", description: "Short label, e.g. 'Named target segment'" },
+          pass: { type: "boolean" },
+          fix: { type: ["string", "null"], description: "One-line fix when the check fails; null when it passes" },
+        },
+        required: ["criterion", "pass", "fix"],
+        additionalProperties: false,
+      },
+    },
+    clarifyingQuestions: {
+      type: "array",
+      description:
+        "0-2 questions, ONLY for ambiguities in the author's intent that research cannot resolve (e.g. which of two segments they mean). Empty when the intent is clear.",
+      items: { type: "string" },
     },
     suggestedMetrics: {
       type: "array",
@@ -476,13 +531,27 @@ const REFINE_SCHEMA = {
     },
     suggestedWatchlist: {
       type: "array",
-      items: { type: "string" },
-      description: "4-6 real companies, products, or competitive signals to monitor",
+      description:
+        "4-6 REAL, currently-operating companies/products/signals verified via your research — aim for 2-3 direct competitors, 1-2 platform/absorption threats, and 1 leading-indicator signal",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          reason: { type: "string", description: "One line: why this is watched, e.g. 'closest incumbent for the same JTBD'" },
+        },
+        required: ["name", "reason"],
+        additionalProperties: false,
+      },
     },
   },
-  required: ["critique", "refinedStatement", "suggestedMetrics", "rejectedMetrics", "suggestedWatchlist"],
+  required: ["critique", "refinedStatement", "rubric", "clarifyingQuestions", "suggestedMetrics", "rejectedMetrics", "suggestedWatchlist"],
   additionalProperties: false,
 } as const;
+
+const REFINE_SEARCHES = 5;
+// Grounded refinement runs a handful of web searches; keep a hard backstop so
+// the wizard is never stuck past the route budget.
+const REFINE_ABORT_MS = Number(process.env.HYPCHECK_REFINE_ABORT_MS) || 240_000;
 
 /** The external-only measurement constraint, stated identically in the refine
  * and run prompts. Hypchecks never see internal data — a metric that needs it
@@ -492,41 +561,67 @@ export const EXTERNAL_ONLY_RULE = [
   `Never propose or lean on anything requiring internal data — revenue, pipeline, deals, customer calls, NPS, churn, active users — unless it's the kind of thing that would appear in a press release.`,
 ].join(" ");
 
-export async function liveRefine(statement: string, log: Logger = rootLogger): Promise<RefineResult> {
+export async function liveRefine(
+  statement: string,
+  answers: RefineAnswer[] = [],
+  log: Logger = rootLogger
+): Promise<RefineResult> {
   const anthropic = client();
   const start = Date.now();
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 4000,
-    output_config: { format: { type: "json_schema", schema: REFINE_SCHEMA as unknown as Record<string, unknown> } },
-    messages: [
-      {
-        role: "user",
-        content: [
-          `You are a seasoned product strategy advisor. A product manager has drafted this product hypothesis:`,
-          ``,
-          `"${statement}"`,
-          ``,
-          `Critique it, rewrite it to be sharp and falsifiable, propose 4-5 weighted signal metrics for tracking product-market fit over time, and suggest a competitive watchlist.`,
-          ``,
-          `## Metric constraint (hard rule)`,
-          EXTERNAL_ONLY_RULE,
-          `For each suggested metric, also specify \`signals\` (the concrete public evidence a run should look for) and \`direction\` (what a score-up vs score-down observation looks like).`,
-          `Validate every candidate metric before suggesting it: (1) is it observable from public sources only? (2) will fresh evidence realistically appear at a weekly-to-monthly tracking cadence? Candidates that fail either test go in \`rejectedMetrics\` with a one-line reason — never silently drop one.`,
-        ].join("\n"),
-      },
-    ],
-  });
+  const prompt = [
+    `You are a talented product strategy thought leader. A product manager has given you directional intent in this draft hypothesis — your job is to author the sharpest, market-grounded version of it, not merely polish the wording:`,
+    ``,
+    `"${statement}"`,
+    ``,
+    answers.length
+      ? `## The author answered your clarifying questions\n${answers
+          .map((a) => `- Q: ${a.question}\n  A: ${a.answer}`)
+          .join("\n")}\nIncorporate these answers; do NOT ask further questions (return an empty clarifyingQuestions array).`
+      : ``,
+    `## Ground yourself first (up to ${REFINE_SEARCHES} web searches)`,
+    `Research the CURRENT state of this market before critiquing: who actually serves this job today, recent entrants and funding, how the category is moving. The critique, rewrite, metrics, and watchlist must reflect what you find — not training-data priors.`,
+    ``,
+    `## What to return`,
+    `- \`critique\`: what is vague, unfalsifiable, or missing — informed by the research.`,
+    `- \`refinedStatement\`: a sharper, falsifiable rewrite preserving the author's intent.`,
+    `- \`rubric\`: score the refined statement against exactly five checks, in order: named target segment; falsifiable claim; externally observable evidence; time-bound/testable; differentiated vs named incumbents. Honest pass/fail with a one-line fix on failures.`,
+    `- \`clarifyingQuestions\`: 0-2 questions, ONLY where the author's intent is ambiguous in a way research cannot resolve. Empty when intent is clear.`,
+    `- \`suggestedWatchlist\`: 4-6 REAL, currently-operating entities you verified in your research, each with a one-line reason. Aim for 2-3 direct competitors, 1-2 platform/absorption threats, 1 leading-indicator signal.`,
+    ``,
+    `## Metric constraint (hard rule)`,
+    EXTERNAL_ONLY_RULE,
+    `Propose 4-5 weighted signal metrics. For each, specify \`signals\` (the concrete public evidence a run should look for) and \`direction\` (what a score-up vs score-down observation looks like).`,
+    `Validate every candidate metric before suggesting it: (1) is it observable from public sources only? (2) will fresh evidence realistically appear at a weekly-to-monthly tracking cadence? Candidates that fail either test go in \`rejectedMetrics\` with a one-line reason — never silently drop one.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const stream = anthropic.messages.stream(
+    {
+      model: MODEL,
+      max_tokens: 8000,
+      output_config: { format: { type: "json_schema", schema: REFINE_SCHEMA as unknown as Record<string, unknown> } },
+      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: REFINE_SEARCHES }],
+      messages: [{ role: "user", content: prompt }],
+    },
+    { signal: AbortSignal.timeout(REFINE_ABORT_MS) }
+  );
+  const response = await stream.finalMessage();
   log.info("engine.refine.done", {
     ms: Date.now() - start,
     model: MODEL,
+    round: answers.length ? 2 : 1,
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
+    searches: webSearchRequests(response.usage),
     stopReason: response.stop_reason,
   });
   const jsonText = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("");
+  if (!jsonText.trim()) {
+    throw new Error(`Grounded refine returned no structured result (stop_reason: ${response.stop_reason})`);
+  }
   return JSON.parse(jsonText) as RefineResult;
 }

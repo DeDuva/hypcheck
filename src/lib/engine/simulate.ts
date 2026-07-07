@@ -85,6 +85,7 @@ export function simulateRun(
 ): RunResult {
   const seed = hashString(`${hypcheck.id}:${version.version}:${runDate.toISOString().slice(0, 10)}`);
   const rand = mulberry32(seed);
+  const watchNames = hypcheck.watchlist.map((w) => w.name);
 
   const base = prevScore ?? 45 + rand() * 20;
   const drift = (rand() - 0.48) * 8; // slight upward bias
@@ -116,8 +117,8 @@ export function simulateRun(
   const execSummary =
     override.execSummary ??
     `${opener} The strongest signal is ${strongest?.name.toLowerCase() ?? "demand"} (${strongest ? Math.round(strongest.score) : "-"}), while ${weakest?.name.toLowerCase() ?? "differentiation"} (${weakest ? Math.round(weakest.score) : "-"}) remains the weakest link. ${
-      hypcheck.watchlist.length
-        ? `Watchlist activity from ${hypcheck.watchlist[0]} and peers was ${delta < -1.5 ? "a headwind" : "not a major factor"} this period.`
+      watchNames.length
+        ? `Watchlist activity from ${watchNames[0]} and peers was ${delta < -1.5 ? "a headwind" : "not a major factor"} this period.`
         : ""
     }`.trim();
 
@@ -131,8 +132,8 @@ export function simulateRun(
           body: `Repeated soft readings on ${weakest?.name.toLowerCase() ?? "this signal"} suggest the hypothesis may be too broad for the current market. Narrowing the target segment could concentrate the strongest demand signals.`,
           direction: "challenging",
           proposedRevision:
-            hypcheck.watchlist.length && rand() < 0.6
-              ? `${version.statement} Initial focus narrows to teams already evaluating ${hypcheck.watchlist[0]}-class tools, where the pain is most acute.`
+            watchNames.length && rand() < 0.6
+              ? `${version.statement} Initial focus narrows to teams already evaluating ${watchNames[0]}-class tools, where the pain is most acute.`
               : null,
         });
       } else if (delta > 2) {
@@ -154,7 +155,7 @@ export function simulateRun(
   }
 
   const watchlistNotes: Record<string, string> = {};
-  for (const w of hypcheck.watchlist) watchlistNotes[w] = pick(rand, WATCH_NOTES);
+  for (const w of watchNames) watchlistNotes[w] = pick(rand, WATCH_NOTES);
 
   const confidence = Math.round((0.55 + rand() * 0.25) * 100) / 100;
 
@@ -169,7 +170,7 @@ export function simulateRun(
 
   const industryAnalysis = synthIndustryAnalysis({
     hypcheckName: hypcheck.name,
-    watchlist: hypcheck.watchlist,
+    watchlist: watchNames,
     score: pmfScore,
     delta,
     strongest: strongest?.name ?? null,
@@ -189,7 +190,7 @@ export function simulateRun(
     execSummary,
     industryAnalysis,
     metricScores,
-    watchlist: hypcheck.watchlist,
+    watchlist: watchNames,
     watchlistNotes,
     insights,
     changesSinceLastRun,
@@ -201,7 +202,7 @@ export function simulateRun(
       delta < -1.5
         ? "Review the pending insights and consider tightening the hypothesis before the next run."
         : "Hold the current hypothesis; re-evaluate after the next scheduled run.",
-      hypcheck.watchlist.length ? `Keep ${hypcheck.watchlist[0]} under close watch for direct feature overlap.` : "Consider adding competitors to the watchlist for sharper competitive signal.",
+      watchNames.length ? `Keep ${watchNames[0]} under close watch for direct feature overlap.` : "Consider adding competitors to the watchlist for sharper competitive signal.",
     ],
   });
 
