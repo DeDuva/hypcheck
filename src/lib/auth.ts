@@ -87,11 +87,11 @@ export const auth = betterAuth({
             });
           }
           logger.info("auth.signup", { email: user.email });
-          // Phase 2 bootstrap: ALLOWED_EMAILS is still the only invite gate
-          // (no admin console yet), so everyone who clears it starts as
-          // admin — same full access they'd have had pre-phase-2. Phase 3
-          // introduces real differentiation (invites, an admin console).
-          return { data: { ...user, role: "admin" } };
+          // Enforcement is live: new signups start least-privilege as
+          // `member` and get exactly what their per-hypcheck grant or
+          // invitation says. There's no admin console yet, so promoting
+          // someone to `admin`/`creator` is a direct SQL update for now.
+          return { data: { ...user, role: "member" } };
         },
         after: async (user) => {
           const activated = await activatePendingInvitations(user.id, user.email.trim().toLowerCase());
