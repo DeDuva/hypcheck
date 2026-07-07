@@ -90,6 +90,13 @@ export interface Metric {
   name: string;
   description: string;
   weight: number; // 1-5
+  /** The concrete public evidence a run should look for (press releases, funding
+   * news, launches, pricing pages, job postings, search/community trends…).
+   * Empty on metrics created before the external-only model. */
+  signals: string;
+  /** What a score-up vs. score-down observation looks like, so week-over-week
+   * scoring stays consistent. Empty on pre-feature metrics. */
+  direction: string;
 }
 
 /** Age of the newest evidence supporting a metric score, relative to the
@@ -171,7 +178,11 @@ export interface PriorRunDigest {
 export interface RefineResult {
   critique: string;
   refinedStatement: string;
-  suggestedMetrics: Array<{ name: string; description: string; weight: number }>;
+  suggestedMetrics: Array<{ name: string; description: string; weight: number; signals: string; direction: string }>;
+  /** Candidate metrics the validator rejected (need internal data, or fresh
+   * public evidence won't realistically appear at tracking cadence). Surfaced
+   * to the user as a quiet explanation, never silently dropped. */
+  rejectedMetrics: Array<{ name: string; reason: string }>;
   suggestedWatchlist: string[];
 }
 

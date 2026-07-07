@@ -9,14 +9,50 @@ interface MetricDraft {
   name: string;
   description: string;
   weight: number;
+  signals: string; // the concrete public evidence a run should look for
+  direction: string; // what score-up vs score-down looks like
+  vetted?: boolean; // came from the AI refinement, which validated external observability
 }
 
 const DEFAULT_METRICS: MetricDraft[] = [
-  { name: "Demand signal", description: "Search volume, community discussion, and inbound interest indicating the target user actively feels this problem.", weight: 5 },
-  { name: "Willingness to pay", description: "Evidence of budget: pricing of adjacent tools, procurement chatter, hiring for the workflow.", weight: 4 },
-  { name: "Competitive whitespace", description: "How directly incumbents and new entrants cover this exact job-to-be-done.", weight: 4 },
-  { name: "Adoption friction", description: "Switching costs, integration burden, and behavior change required to adopt.", weight: 3 },
+  {
+    name: "Demand signal",
+    description: "Search volume, community discussion, and inbound interest indicating the target user actively feels this problem.",
+    weight: 5,
+    signals: "Search-trend movement, new community threads on the pain point, practitioner posts describing the workaround.",
+    direction: "Up: rising search/community volume on the problem. Down: discussion fades or shifts to an incumbent.",
+  },
+  {
+    name: "Willingness to pay",
+    description: "Evidence of budget: pricing of adjacent tools, procurement chatter, hiring for the workflow.",
+    weight: 4,
+    signals: "Pricing-page changes at adjacent tools, funding rounds in the category, job postings that own this workflow.",
+    direction: "Up: adjacent tools raise prices or new paid entrants appear. Down: category tools go freemium or get bundled.",
+  },
+  {
+    name: "Competitive whitespace",
+    description: "How directly incumbents and new entrants cover this exact job-to-be-done.",
+    weight: 4,
+    signals: "Launch posts, changelogs, and feature announcements from incumbents and new entrants targeting the same job.",
+    direction: "Up: the specific job stays unserved. Down: a credible player ships direct coverage of it.",
+  },
+  {
+    name: "Adoption friction",
+    description: "Switching costs, integration burden, and behavior change required to adopt.",
+    weight: 3,
+    signals: "New integrations/APIs in the ecosystem, platform policy changes, public complaints about switching costs.",
+    direction: "Up: ecosystem changes lower the barrier to adopt. Down: lock-in or new compliance hurdles raise it.",
+  },
 ];
+
+// Hypchecks only see public web signals — flag hand-written metrics that would
+// need internal data, since no run will ever be able to observe them.
+const INTERNAL_DATA_RE =
+  /\b(revenue|arr|mrr|churn|nps|csat|pipeline|bookings|quota|win rates?|closed deals?|deal flow|sales calls?|customer (calls?|interviews?)|retention|conversion rates?|active users|dau|mau|wau)\b/i;
+
+function looksInternal(m: MetricDraft): boolean {
+  return INTERNAL_DATA_RE.test(`${m.name} ${m.description} ${m.signals}`);
+}
 
 const STEPS = ["Hypothesis", "Metrics", "Cadence & watchlist"];
 
@@ -42,7 +78,7 @@ export function Wizard() {
     startRefine(async () => {
       const result = await refineAction(statement);
       setRefine(result);
-      if (result.suggestedMetrics.length) setMetrics(result.suggestedMetrics);
+      if (result.suggestedMetrics.length) setMetrics(result.suggestedMetrics.map((m) => ({ ...m, vetted: true })));
     });
   }
 
@@ -60,7 +96,13 @@ export function Wizard() {
         cadence,
         depth,
         watchlist,
-        metrics: metrics.map((m) => ({ ...m, name: m.name.trim(), description: m.description.trim() })),
+        metrics: metrics.map(({ vetted: _vetted, ...m }) => ({
+          ...m,
+          name: m.name.trim(),
+          description: m.description.trim(),
+          signals: m.signals.trim(),
+          direction: m.direction.trim(),
+        })),
       });
     });
   }
@@ -178,7 +220,7 @@ export function Wizard() {
           <div>
             <h2 className="text-[14px] font-semibold">Signal metrics</h2>
             <p className="mt-0.5 text-[12.5px] text-ink-faint">
-              Each run scores these 0–100 and combines them (by weight) into the PMF score.
+              Each run scores these 0–100 from public web signals only and combines them (by weight) into the PMF score.
               {refine?.suggestedMetrics.length ? " Pre-filled from the AI refinement — edit freely." : ""}
             </p>
             <div className="mt-4 space-y-3">
@@ -191,6 +233,11 @@ export function Wizard() {
                       placeholder="Metric name"
                       className="w-52 rounded-lg border border-edge bg-surface px-2.5 py-1.5 text-[13px] font-medium outline-none focus:border-iris"
                     />
+                    {m.vetted && !looksInternal(m) && (
+                      <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-medium text-emerald-700">
+                        external signal
+                      </span>
+                    )}
                     <label className="flex items-center gap-2 text-[12px] text-ink-faint">
                       Weight
                       <input
@@ -224,12 +271,36 @@ export function Wizard() {
                     placeholder="What evidence this metric tracks"
                     className="mt-2 w-full rounded-lg border border-edge bg-surface px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none focus:border-iris"
                   />
+                  <input
+                    value={m.signals}
+                    onChange={(e) => setMetrics((ms) => ms.map((x, xi) => (xi === i ? { ...x, signals: e.target.value } : x)))}
+                    placeholder="Public evidence to look for — e.g. funding news, launches, pricing changes, job postings"
+                    className="mt-1.5 w-full rounded-lg border border-edge bg-surface px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none focus:border-iris"
+                  />
+                  <input
+                    value={m.direction}
+                    onChange={(e) => setMetrics((ms) => ms.map((x, xi) => (xi === i ? { ...x, direction: e.target.value } : x)))}
+                    placeholder="What moves it — e.g. up: new entrants raise; down: incumbent bundles it free"
+                    className="mt-1.5 w-full rounded-lg border border-edge bg-surface px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none focus:border-iris"
+                  />
+                  {looksInternal(m) && (
+                    <p className="mt-1.5 text-[11.5px] text-amber-700/90">
+                      Looks like this needs internal data — no run can observe it from public sources. Reframe it around a
+                      public proxy (pricing, hiring, launches, search volume).
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
+            {refine?.rejectedMetrics?.length ? (
+              <p className="mt-3 text-[11.5px] leading-relaxed text-ink-faint">
+                Not suggested (can’t be observed from public sources at cadence):{" "}
+                {refine.rejectedMetrics.map((r) => `${r.name} — ${r.reason.replace(/\.$/, "")}`).join(" · ")}
+              </p>
+            ) : null}
             <button
               type="button"
-              onClick={() => setMetrics((ms) => [...ms, { name: "", description: "", weight: 3 }])}
+              onClick={() => setMetrics((ms) => [...ms, { name: "", description: "", weight: 3, signals: "", direction: "" }])}
               className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper"
             >
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
