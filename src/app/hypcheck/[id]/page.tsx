@@ -20,7 +20,8 @@ export const maxDuration = 800;
 
 export default async function HypcheckOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { hypcheck } = await requireHypcheckAccess(id, "viewer");
+  const { hypcheck, role } = await requireHypcheckAccess(id, "viewer");
+  const canEdit = role === "editor" || role === "owner" || role === "admin";
 
   const [runs, versions, insights, metrics] = await Promise.all([
     listRuns(id),
@@ -78,15 +79,17 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/hypcheck/${id}/settings`}
-            className="rounded-lg bg-surface px-3.5 py-2 text-[13px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper"
-          >
-            Settings
-          </Link>
-          <RunNowButton hypcheckId={id} live={Boolean(process.env.ANTHROPIC_API_KEY)} />
-        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/hypcheck/${id}/settings`}
+              className="rounded-lg bg-surface px-3.5 py-2 text-[13px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper"
+            >
+              Settings
+            </Link>
+            <RunNowButton hypcheckId={id} live={Boolean(process.env.ANTHROPIC_API_KEY)} />
+          </div>
+        )}
       </div>
 
       {/* Score summary + hypothesis */}
