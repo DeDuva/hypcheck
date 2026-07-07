@@ -71,8 +71,8 @@ export const auth = betterAuth({
   user: {
     additionalFields: {
       // Global role for phase-2 access control (src/lib/authz.ts). `input:
-      // false` keeps it out of the signup payload — only the hook below (or a
-      // future admin console) may set it.
+      // false` keeps it out of the signup payload — only the hook below or
+      // the /admin console (updateUserRoleAction) may set it.
       role: { type: "string", required: false, defaultValue: "member", input: false },
     },
   },
@@ -89,8 +89,8 @@ export const auth = betterAuth({
           logger.info("auth.signup", { email: user.email });
           // Enforcement is live: new signups start least-privilege as
           // `member` and get exactly what their per-hypcheck grant or
-          // invitation says. There's no admin console yet, so promoting
-          // someone to `admin`/`creator` is a direct SQL update for now.
+          // invitation says. Promoting someone to `admin`/`creator` is done
+          // from the /admin console.
           return { data: { ...user, role: "member" } };
         },
         after: async (user) => {

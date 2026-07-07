@@ -19,11 +19,12 @@ import {
   setInsightStatus,
   setLastRunAttempt,
   updateHypcheckSettings,
+  updateUserRole,
   type CreateHypcheckInput,
 } from "./store";
 import { engineInfo } from "./engine";
-import { requireCanCreateHypcheck, requireHypcheckAccess, requireUser } from "./authz";
-import type { Cadence, Depth, GrantRole, RefineAnswer, RefineResult } from "./types";
+import { requireAdmin, requireCanCreateHypcheck, requireHypcheckAccess, requireUser } from "./authz";
+import type { Cadence, Depth, GlobalRole, GrantRole, RefineAnswer, RefineResult } from "./types";
 import { logger, newRequestId, serializeError } from "./logger";
 
 /** Every server action runs inside a correlated span so it's traceable in logs. */
@@ -215,10 +216,48 @@ export async function revokeHypcheckAccessAction(hypcheckId: string, userId: str
   revalidatePath(`/hypcheck/${hypcheckId}/settings`);
 }
 
+/**
+ * Change an existing member's role on a hypcheck. Same grant matrix as
+ * grantHypcheckAccessAction: only an owner/admin may promote to editor; an
+ * editor may only set viewer.
+ */
+export async function updateAccessRoleAction(hypcheckId: string, userId: string, formData: FormData): Promise<void> {
+  const { viewer, role } = await requireHypcheckAccess(hypcheckId, "editor");
+  const log = actionLogger("updateAccessRole", { userId: viewer.id, hypcheckId });
+  const settingsPath = `/hypcheck/${hypcheckId}/settings`;
+  const newRole: GrantRole = String(formData.get("role") ?? "viewer") === "editor" ? "editor" : "viewer";
+
+  if (newRole === "editor" && role !== "admin" && role !== "owner") {
+    redirect(`${settingsPath}?shareError=${encodeURIComponent("Only the owner or an admin can grant editor access")}`);
+  }
+  await grantAccess(hypcheckId, userId, newRole, viewer.id);
+  log.info("hypcheck.access.roleChanged", { hypcheckId, targetUserId: userId, role: newRole });
+  revalidatePath(settingsPath);
+}
+
 export async function revokeInvitationAction(hypcheckId: string, email: string): Promise<void> {
   const { viewer } = await requireHypcheckAccess(hypcheckId, "editor");
   const log = actionLogger("revokeInvitation", { userId: viewer.id, hypcheckId });
   await revokeInvitation(hypcheckId, email);
   log.info("hypcheck.invitation.revoked", { hypcheckId, email });
   revalidatePath(`/hypcheck/${hypcheckId}/settings`);
+}
+
+/**
+ * Change a user's global role — the only way to promote someone to
+ * creator/admin now that signups no longer bootstrap as admin. Admin-only,
+ * and an admin can't demote themselves — that's how you'd end up with zero
+ * admins able to undo it.
+ */
+export async function updateUserRoleAction(userId: string, formData: FormData): Promise<void> {
+  const viewer = await requireAdmin();
+  const log = actionLogger("updateUserRole", { userId: viewer.id, targetUserId: userId });
+  const role = String(formData.get("role") ?? "") as GlobalRole;
+  if (!["admin", "creator", "member"].includes(role)) return;
+  if (userId === viewer.id) {
+    redirect(`/admin?roleError=${encodeURIComponent("You can't change your own role")}`);
+  }
+  await updateUserRole(userId, role);
+  log.info("user.role.changed", { targetUserId: userId, role });
+  revalidatePath("/admin");
 }

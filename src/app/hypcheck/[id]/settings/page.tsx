@@ -4,6 +4,7 @@ import {
   grantHypcheckAccessAction,
   revokeHypcheckAccessAction,
   revokeInvitationAction,
+  updateAccessRoleAction,
   updateSettingsAction,
 } from "@/lib/actions";
 import { CADENCE_LABELS, DEPTH_LABELS, type Cadence, type Depth } from "@/lib/types";
@@ -189,10 +190,29 @@ export default async function SettingsPage({
                   <p className="text-[13px] font-medium text-ink">{grant.name}</p>
                   <p className="text-[12px] text-ink-faint">{grant.email}</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="rounded-full bg-paper px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-ink-soft ring-1 ring-inset ring-edge">
-                    {grant.role}
-                  </span>
+                <div className="flex items-center gap-2">
+                  {canGrantEditor || grant.role === "viewer" ? (
+                    <form action={updateAccessRoleAction.bind(null, id, grant.userId)} className="flex items-center gap-1.5">
+                      <select
+                        name="role"
+                        defaultValue={grant.role}
+                        className="rounded-full border-0 bg-paper px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-ink-soft outline-none ring-1 ring-inset ring-edge focus:ring-iris"
+                      >
+                        <option value="viewer">Viewer</option>
+                        {canGrantEditor && <option value="editor">Editor</option>}
+                      </select>
+                      <button
+                        type="submit"
+                        className="text-[11.5px] font-medium text-ink-faint transition-colors hover:text-ink"
+                      >
+                        Update
+                      </button>
+                    </form>
+                  ) : (
+                    <span className="rounded-full bg-paper px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-ink-soft ring-1 ring-inset ring-edge">
+                      {grant.role}
+                    </span>
+                  )}
                   <form action={revokeHypcheckAccessAction.bind(null, id, grant.userId)}>
                     <button
                       type="submit"
