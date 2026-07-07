@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS metrics (
   hypcheck_id TEXT NOT NULL REFERENCES hypchecks(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  weight INTEGER NOT NULL DEFAULT 3
+  weight INTEGER NOT NULL DEFAULT 3,
+  signals TEXT NOT NULL DEFAULT '',
+  direction TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
@@ -159,6 +161,10 @@ const MIGRATIONS: Record<string, Record<string, string>> = {
   },
   hypchecks: {
     owner_id: "TEXT",
+  },
+  metrics: {
+    signals: "TEXT NOT NULL DEFAULT ''",
+    direction: "TEXT NOT NULL DEFAULT ''",
   },
   user: {
     role: "TEXT NOT NULL DEFAULT 'member'",

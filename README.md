@@ -29,6 +29,8 @@ Runs enforce an evidence-freshness discipline — phase 1 of the [signal-quality
 - The PMF score is computed **deterministically in code** as the freshness-gated weighted average of metric scores (the model's own holistic number is only logged as a sanity check), and confidence drops mechanically as fresh coverage drops.
 - Every run after the first opens with a **"What changed since <date>"** delta summary, grounded in a structured digest of the previous run (per-metric scores, analyst stance, open insights).
 
+Metrics are **external-only** (phase 2): every metric must be assessable purely from public web sources (press releases, funding news, launches, pricing pages, job postings, search/community trends) — nothing that needs internal data like revenue, deals, or customer calls. Each metric carries `signals` (the public evidence a run looks for) and `direction` (what up vs. down looks like), the AI refinement validates candidates against this bar (rejects are shown with reasons, never dropped silently), and the wizard warns when a hand-written metric looks internal.
+
 ## Run locally
 
 ```bash

@@ -75,6 +75,8 @@ function rowToMetric(r: Row): Metric {
     name: r.name as string,
     description: (r.description as string) ?? "",
     weight: Number(r.weight),
+    signals: (r.signals as string) ?? "",
+    direction: (r.direction as string) ?? "",
   };
 }
 
@@ -154,7 +156,7 @@ export interface CreateHypcheckInput {
   cadence: Cadence;
   depth: Depth;
   watchlist: string[];
-  metrics: Array<{ name: string; description: string; weight: number }>;
+  metrics: Array<{ name: string; description: string; weight: number; signals?: string; direction?: string }>;
 }
 
 export async function createHypcheck(input: CreateHypcheckInput, ownerId: string): Promise<Hypcheck> {
@@ -173,8 +175,8 @@ export async function createHypcheck(input: CreateHypcheckInput, ownerId: string
   });
   for (const m of input.metrics) {
     await db.execute({
-      sql: "INSERT INTO metrics (id, hypcheck_id, name, description, weight) VALUES (?, ?, ?, ?, ?)",
-      args: [newId(), id, m.name, m.description, m.weight],
+      sql: "INSERT INTO metrics (id, hypcheck_id, name, description, weight, signals, direction) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      args: [newId(), id, m.name, m.description, m.weight, m.signals ?? "", m.direction ?? ""],
     });
   }
   return (await getHypcheck(id))!;
@@ -268,6 +270,19 @@ export async function revokeAccess(hypcheckId: string, userId: string): Promise<
   await db.execute({
     sql: "DELETE FROM hypcheck_access WHERE hypcheck_id = ? AND user_id = ?",
     args: [hypcheckId, userId],
+  });
+}
+
+/** Idempotently create a user row. Dev open mode's synthetic viewer needs a
+ * real row because hypchecks.owner_id has a FOREIGN KEY to "user"(id), which
+ * the local sqlite client enforces. */
+export async function ensureUserRow(u: { id: string; email: string; name: string; role: string }): Promise<void> {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO "user" ("id", "name", "email", "emailVerified", "image", "createdAt", "updatedAt", "role")
+          VALUES (?, ?, ?, 1, NULL, ?, ?, ?)`,
+    args: [u.id, u.name, u.email, now, now, u.role],
   });
 }
 

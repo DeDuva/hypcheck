@@ -160,12 +160,43 @@ function heuristicRefine(statement: string): RefineResult {
     critique,
     refinedStatement,
     suggestedMetrics: [
-      { name: "Demand signal", description: "Search volume, community discussion, and inbound interest indicating the target user actively feels this problem.", weight: 5 },
-      { name: "Willingness to pay", description: "Evidence of budget: pricing of adjacent tools, procurement chatter, hiring for the workflow.", weight: 4 },
-      { name: "Competitive whitespace", description: "How directly incumbents and new entrants cover this exact job-to-be-done.", weight: 4 },
-      { name: "Adoption friction", description: "Switching costs, integration burden, and behavior change required for the target user to adopt.", weight: 3 },
-      { name: "Market timing", description: "Category momentum — is this problem growing, stable, or being absorbed by platforms?", weight: 3 },
+      {
+        name: "Demand signal",
+        description: "Search volume, community discussion, and inbound interest indicating the target user actively feels this problem.",
+        weight: 5,
+        signals: "Search-trend movement, new community threads and upvotes on the pain point, practitioner posts describing the workaround.",
+        direction: "Up: rising search/community volume on the problem. Down: discussion fades or shifts to 'solved by' an incumbent.",
+      },
+      {
+        name: "Willingness to pay",
+        description: "Evidence of budget: pricing of adjacent tools, procurement chatter, hiring for the workflow.",
+        weight: 4,
+        signals: "Pricing-page changes at adjacent tools, funding rounds in the category, job postings that own this workflow.",
+        direction: "Up: adjacent tools raise prices or new paid entrants appear. Down: category tools go freemium or get bundled free.",
+      },
+      {
+        name: "Competitive whitespace",
+        description: "How directly incumbents and new entrants cover this exact job-to-be-done.",
+        weight: 4,
+        signals: "Launch posts, changelogs, and feature announcements from incumbents and new entrants targeting the same job.",
+        direction: "Up: the specific job stays unserved. Down: a credible player ships direct coverage of it.",
+      },
+      {
+        name: "Adoption friction",
+        description: "Switching costs, integration burden, and behavior change required for the target user to adopt.",
+        weight: 3,
+        signals: "New integrations/APIs in the ecosystem, platform policy changes, public complaints about switching costs.",
+        direction: "Up: ecosystem changes lower the barrier to adopt. Down: platform lock-in or new compliance hurdles raise it.",
+      },
+      {
+        name: "Market timing",
+        description: "Category momentum — is this problem growing, stable, or being absorbed by platforms?",
+        weight: 3,
+        signals: "Analyst coverage, category funding totals, conference agendas, platform-vendor roadmap announcements.",
+        direction: "Up: category coverage and funding accelerate. Down: platforms absorb the category or attention moves on.",
+      },
     ],
+    rejectedMetrics: [],
     suggestedWatchlist: [],
   };
 }
