@@ -153,6 +153,16 @@ const RESULT_SCHEMA = {
       description:
         "2-4 sentences on what materially changed since the previous run — new events, metric movements, and why. Null if there is no previous run.",
     },
+    strongestFor: {
+      type: ["string", "null"],
+      description:
+        "The single strongest piece of FRESH evidence from this period SUPPORTING the hypothesis, in 1-2 sentences with its source cited inline. Null when no fresh supporting evidence emerged.",
+    },
+    strongestAgainst: {
+      type: ["string", "null"],
+      description:
+        "The single strongest piece of FRESH evidence from this period CHALLENGING the hypothesis, in 1-2 sentences with its source cited inline. Null when no fresh challenging evidence emerged.",
+    },
     sources: {
       type: "array",
       description: "Every web source cited anywhere in the report",
@@ -171,7 +181,7 @@ const RESULT_SCHEMA = {
       },
     },
   },
-  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes", "watchlistChanges", "changesSinceLastRun", "sources"],
+  required: ["pmfScore", "confidence", "execSummary", "metricScores", "industryAnalysis", "insights", "risks", "actions", "watchlistNotes", "watchlistChanges", "changesSinceLastRun", "strongestFor", "strongestAgainst", "sources"],
   additionalProperties: false,
 } as const;
 
@@ -183,6 +193,8 @@ interface StructuredResult {
   confidence: number;
   execSummary: string;
   changesSinceLastRun: string | null;
+  strongestFor: string | null;
+  strongestAgainst: string | null;
   metricScores: Array<{ name: string; score: number; note: string; freshness: EvidenceFreshness }>;
   industryAnalysis: {
     headline: string;
@@ -236,7 +248,7 @@ export async function liveRun(
     : ``;
 
   const researchPrompt = [
-    `You are a market researcher assessing product-market-fit evidence for a product hypothesis. Research the CURRENT state of the market using web search, then return your findings as a single structured research result.`,
+    `You are the product strategy advisor who authored this hypothesis and its measurement plan, and your credibility rides on stress-testing it honestly every period — not defending it. Research the CURRENT state of the market using web search, weigh the evidence for and against, then return your findings as a single structured research result.`,
     ``,
     `## Hypothesis under test (v${version.version})`,
     version.statement,
@@ -267,6 +279,8 @@ export async function liveRun(
     `- Ground every claim in what you find. When a field draws on a source, cite it inline as a markdown link, and list every source you cite in the \`sources\` array.`,
     `- \`execSummary\`: a 3-4 sentence executive summary of this period's findings, written for a product manager.${prior ? " Lead with what changed since the previous run." : ""}`,
     `- \`changesSinceLastRun\`: ${prior ? "2-4 sentences on what materially changed since the previous run — events, metric movements, and why." : "null (this is the first run)."}`,
+    `- \`strongestFor\` / \`strongestAgainst\`: the single strongest piece of FRESH evidence from this period on each side of the hypothesis, cited. Be honest on both sides — a period with nothing on one side gets null there, not a stretch.`,
+    `- The revision call: after weighing the evidence, explicitly decide whether this period warrants amending the hypothesis. If yes, exactly one insight must carry a complete \`proposedRevision\`. If no, the \`execSummary\` must say in one clause why the current framing still stands.`,
     `- \`metricScores\`: assess each metric (use the exact metric names: ${metrics.map((m) => m.name).join(", ")}) with a 0-100 score, a 2-3 sentence evidence-based \`note\`, and its \`freshness\`. Then derive an overall \`pmfScore\` (0-100) as a weighted judgment, plus a \`confidence\` (0-1).`,
     `- \`insights\`: surface 1-3 insights. Mark each as supporting, challenging, or watch. If an insight genuinely warrants amending the hypothesis, include a complete \`proposedRevision\` of the hypothesis statement; otherwise set it to null.`,
     `- \`risks\` and \`actions\`: key risks and recommended actions for the product manager.`,
@@ -436,6 +450,8 @@ export async function liveRun(
     actions: data.actions,
     sources: Array.isArray(data.sources) ? data.sources : [],
     changesSinceLastRun,
+    evidenceFor: data.strongestFor,
+    evidenceAgainst: data.strongestAgainst,
     priorRunDate: prior?.runAt ?? null,
     windowDays,
     methodChangeNote,
