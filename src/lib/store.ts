@@ -25,11 +25,16 @@ import { CADENCE_DAYS } from "./types";
 type Row = Record<string, unknown>;
 
 /** Watchlists stored before phase 3 are plain string arrays — normalize both
- * shapes to WatchlistEntry so callers never see the difference. */
+ * shapes to WatchlistEntry so callers never see the difference. `category` is
+ * absent on entries created before that field existed or added manually. */
 function parseWatchlist(json: string): WatchlistEntry[] {
-  const raw = JSON.parse(json || "[]") as Array<string | { name?: string; reason?: string }>;
+  const raw = JSON.parse(json || "[]") as Array<string | { name?: string; reason?: string; category?: WatchlistEntry["category"] }>;
   return raw
-    .map((e) => (typeof e === "string" ? { name: e, reason: "" } : { name: e.name ?? "", reason: e.reason ?? "" }))
+    .map((e) =>
+      typeof e === "string"
+        ? { name: e, reason: "" }
+        : { name: e.name ?? "", reason: e.reason ?? "", category: e.category }
+    )
     .filter((e) => e.name);
 }
 

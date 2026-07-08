@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { createHypcheckAction, refineAction } from "@/lib/actions";
-import type { Cadence, Depth, RefineResult, WatchlistEntry } from "@/lib/types";
-import { CADENCE_LABELS, DEPTH_LABELS } from "@/lib/types";
+import type { Cadence, Depth, RefineResult, WatchlistCategory, WatchlistEntry } from "@/lib/types";
+import { CADENCE_LABELS, DEPTH_LABELS, WATCHLIST_CATEGORY_LABELS } from "@/lib/types";
 
 interface MetricDraft {
   name: string;
@@ -56,6 +56,10 @@ function looksInternal(m: MetricDraft): boolean {
 
 const STEPS = ["Hypothesis", "Metrics", "Cadence & watchlist"];
 
+// Suggestions are shown grouped in this order, matching the mix the AI is
+// briefed to research (competitors first, then platform risk, then signals).
+const WATCHLIST_CATEGORY_ORDER: WatchlistCategory[] = ["competitor", "platform_threat", "signal"];
+
 const inputCls =
   "w-full rounded-lg border border-edge bg-paper/50 px-3 py-2 text-[13.5px] outline-none transition-colors focus:border-iris focus:bg-surface";
 
@@ -72,6 +76,7 @@ export function Wizard() {
   const [depth, setDepth] = useState<Depth>("standard");
   const [watchlist, setWatchlist] = useState<WatchlistEntry[]>([]);
   const [watchInput, setWatchInput] = useState("");
+  const [editingWatch, setEditingWatch] = useState<number | null>(null);
   const [creating, startCreate] = useTransition();
 
   const canNext = step === 0 ? name.trim().length > 1 && statement.trim().length > 20 : step === 1 ? metrics.length > 0 : true;
@@ -93,9 +98,13 @@ export function Wizard() {
   function addWatch(entry: WatchlistEntry) {
     const name = entry.name.trim();
     if (name && !watchlist.some((w) => w.name.toLowerCase() === name.toLowerCase())) {
-      setWatchlist((w) => [...w, { name, reason: entry.reason }]);
+      setWatchlist((w) => [...w, { name, reason: entry.reason, category: entry.category }]);
     }
     setWatchInput("");
+  }
+
+  function setWatchReason(i: number, reason: string) {
+    setWatchlist((ws) => ws.map((w, wi) => (wi === i ? { ...w, reason } : w)));
   }
 
   function create() {
@@ -426,58 +435,112 @@ export function Wizard() {
                 Watchlist
               </label>
               <p className="mt-0.5 text-[12px] text-ink-faint">
-                Companies, products, or competitive signals checked in every run. Press Enter to add.
+                Companies, products, or competitive signals checked in every run — each one carries a reason, which
+                is what makes a future check specific instead of generic.
               </p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg border border-edge bg-paper/50 px-2 py-1.5 focus-within:border-iris focus-within:bg-surface">
-                {watchlist.map((w) => (
-                  <span
-                    key={w.name}
-                    title={w.reason || undefined}
-                    className="inline-flex items-center gap-1 rounded-full bg-iris-soft px-2.5 py-1 text-[12px] font-medium text-iris"
-                  >
-                    {w.name}
-                    <button
-                      type="button"
-                      onClick={() => setWatchlist((ws) => ws.filter((x) => x.name !== w.name))}
-                      aria-label={`Remove ${w.name}`}
-                      className="transition-colors hover:text-iris-deep"
-                    >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden>
-                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  </span>
-                ))}
-                <input
-                  id="hc-watch"
-                  value={watchInput}
-                  onChange={(e) => setWatchInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === ",") {
-                      e.preventDefault();
-                      addWatch({ name: watchInput, reason: "" });
-                    }
-                  }}
-                  placeholder={watchlist.length ? "" : "e.g. Gong, Clari, Salesforce Einstein Copilot"}
-                  className="min-w-[180px] flex-1 bg-transparent px-1.5 py-0.5 text-[13px] outline-none"
-                />
-              </div>
-              {refine?.suggestedWatchlist.filter((s) => !watchlist.some((w) => w.name === s.name)).length ? (
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11.5px] text-ink-faint">Suggested (hover for why):</span>
-                  {refine.suggestedWatchlist
-                    .filter((s) => !watchlist.some((w) => w.name === s.name))
-                    .map((s) => (
-                      <button
-                        key={s.name}
-                        type="button"
-                        title={s.reason || undefined}
-                        onClick={() => addWatch(s)}
-                        className="rounded-full bg-surface px-2.5 py-1 text-[12px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-iris-soft hover:text-iris"
-                      >
-                        + {s.name}
-                      </button>
-                    ))}
+
+              {watchlist.length > 0 && (
+                <div className="mt-1.5 divide-y divide-edge rounded-lg border border-edge bg-paper/40">
+                  {watchlist.map((w, i) => (
+                    <div key={w.name} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-ink">{w.name}</p>
+                        {editingWatch === i ? (
+                          <input
+                            autoFocus
+                            defaultValue={w.reason}
+                            placeholder="Why watch this?"
+                            onBlur={(e) => {
+                              setWatchReason(i, e.target.value.trim());
+                              setEditingWatch(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.currentTarget.blur();
+                              if (e.key === "Escape") setEditingWatch(null);
+                            }}
+                            className="mt-1 w-full rounded-md border border-iris bg-surface px-2 py-1 text-[12px] outline-none"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingWatch(i)}
+                            className="mt-0.5 block text-left text-[12px] leading-relaxed text-ink-faint transition-colors hover:text-iris"
+                          >
+                            {w.reason || "+ Add reason"}
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                        {w.category && (
+                          <span className="rounded-full bg-iris-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-iris">
+                            {WATCHLIST_CATEGORY_LABELS[w.category]}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setWatchlist((ws) => ws.filter((_, wi) => wi !== i))}
+                          aria-label={`Remove ${w.name}`}
+                          className="rounded-md p-1 text-ink-faint transition-colors hover:bg-paper hover:text-rose-600"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <input
+                id="hc-watch"
+                value={watchInput}
+                onChange={(e) => setWatchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    addWatch({ name: watchInput, reason: "" });
+                  }
+                }}
+                placeholder="e.g. Gong, Clari, Salesforce Einstein Copilot — press Enter to add"
+                className={`mt-1.5 ${inputCls}`}
+              />
+
+              {refine?.suggestedWatchlist.filter((s) => !watchlist.some((w) => w.name.toLowerCase() === s.name.toLowerCase())).length ? (
+                <div className="mt-3.5 space-y-3 border-t border-edge pt-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+                    Suggested from your research
+                  </p>
+                  {WATCHLIST_CATEGORY_ORDER.map((cat) => {
+                    const items = refine.suggestedWatchlist.filter(
+                      (s) => (s.category ?? "signal") === cat && !watchlist.some((w) => w.name.toLowerCase() === s.name.toLowerCase())
+                    );
+                    if (!items.length) return null;
+                    return (
+                      <div key={cat}>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
+                          {WATCHLIST_CATEGORY_LABELS[cat]}
+                        </span>
+                        <div className="mt-1.5 divide-y divide-edge rounded-lg border border-edge">
+                          {items.map((s) => (
+                            <div key={s.name} className="flex items-start justify-between gap-3 px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="text-[12.5px] font-medium text-ink">{s.name}</p>
+                                <p className="mt-0.5 text-[12px] leading-relaxed text-ink-faint">{s.reason}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => addWatch(s)}
+                                className="shrink-0 rounded-md bg-iris-soft px-2.5 py-1 text-[11.5px] font-medium text-iris transition-colors hover:bg-iris hover:text-white"
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
