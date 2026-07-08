@@ -42,11 +42,23 @@ export interface IndustryAnalysis {
   implications: string; // the "so what" for this hypothesis
 }
 
+/** The role a watchlist entry plays in the hypothesis, so suggestions can be
+ * grouped instead of shown as an undifferentiated list. Absent on manually
+ * typed entries and on watchlists created before this field existed. */
+export type WatchlistCategory = "competitor" | "platform_threat" | "signal";
+
+export const WATCHLIST_CATEGORY_LABELS: Record<WatchlistCategory, string> = {
+  competitor: "Direct competitor",
+  platform_threat: "Platform risk",
+  signal: "Leading indicator",
+};
+
 /** A watchlist entry: a real company/product/signal plus WHY it's watched —
  * the reason is what makes run-time checks targeted rather than generic. */
 export interface WatchlistEntry {
   name: string;
   reason: string; // e.g. "closest incumbent for the same JTBD"; empty on pre-feature entries
+  category?: WatchlistCategory;
 }
 
 /** A run-proposed watchlist edit, accepted/dismissed like a hypothesis revision. */

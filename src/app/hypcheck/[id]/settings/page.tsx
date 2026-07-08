@@ -10,6 +10,7 @@ import {
 import { CADENCE_LABELS, DEPTH_LABELS, type Cadence, type Depth } from "@/lib/types";
 import { requireHypcheckAccess } from "@/lib/authz";
 import { getUserById, listAccessGrantsWithUsers, listInvitations } from "@/lib/store";
+import { WatchlistEditor } from "@/components/WatchlistEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -99,21 +100,7 @@ export default async function SettingsPage({
           </div>
         </div>
 
-        <div>
-          <label htmlFor="watchlist" className="text-[12.5px] font-semibold text-ink">
-            Watchlist
-          </label>
-          <p className="mt-0.5 text-[12px] text-ink-faint">
-            Companies, products, or competitive signals to check each run — comma separated.
-          </p>
-          <input
-            id="watchlist"
-            name="watchlist"
-            defaultValue={hypcheck.watchlist.map((w) => w.name).join(", ")}
-            placeholder="e.g. Gong, Clari, Salesforce Einstein Copilot"
-            className="mt-1.5 w-full rounded-lg border border-edge bg-paper/50 px-3 py-2 text-[13.5px] outline-none transition-colors focus:border-iris focus:bg-surface"
-          />
-        </div>
+        <WatchlistEditor initial={hypcheck.watchlist} />
 
         <div>
           <label htmlFor="status" className="text-[12.5px] font-semibold text-ink">

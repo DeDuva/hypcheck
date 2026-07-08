@@ -554,8 +554,14 @@ const REFINE_SCHEMA = {
         properties: {
           name: { type: "string" },
           reason: { type: "string", description: "One line: why this is watched, e.g. 'closest incumbent for the same JTBD'" },
+          category: {
+            type: "string",
+            enum: ["competitor", "platform_threat", "signal"],
+            description:
+              "competitor: a direct rival serving the same job-to-be-done today. platform_threat: an adjacent platform that could bundle or absorb this as a feature. signal: a leading indicator (search trend, funding, hiring) rather than a company to compete with directly.",
+          },
         },
-        required: ["name", "reason"],
+        required: ["name", "reason", "category"],
         additionalProperties: false,
       },
     },
@@ -602,7 +608,7 @@ export async function liveRefine(
     `- \`refinedStatement\`: a sharper, falsifiable rewrite preserving the author's intent.`,
     `- \`rubric\`: score the refined statement against exactly five checks, in order: named target segment; falsifiable claim; externally observable evidence; time-bound/testable; differentiated vs named incumbents. Honest pass/fail with a one-line fix on failures.`,
     `- \`clarifyingQuestions\`: 0-2 questions, ONLY where the author's intent is ambiguous in a way research cannot resolve. Empty when intent is clear.`,
-    `- \`suggestedWatchlist\`: 4-6 REAL, currently-operating entities you verified in your research, each with a one-line reason. Aim for 2-3 direct competitors, 1-2 platform/absorption threats, 1 leading-indicator signal.`,
+    `- \`suggestedWatchlist\`: 4-6 REAL, currently-operating entities you verified in your research, each with a one-line reason and tagged with its \`category\`. Aim for 2-3 tagged \`competitor\`, 1-2 tagged \`platform_threat\`, 1 tagged \`signal\`.`,
     ``,
     `## Metric constraint (hard rule)`,
     EXTERNAL_ONLY_RULE,

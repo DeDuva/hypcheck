@@ -11,7 +11,6 @@ import {
   createInvitation,
   deleteHypcheck,
   getAccessGrant,
-  getHypcheck,
   getInsight,
   getUserByEmail,
   grantAccess,
@@ -25,7 +24,7 @@ import {
 } from "./store";
 import { engineInfo } from "./engine";
 import { requireAdmin, requireCanCreateHypcheck, requireHypcheckAccess, requireUser } from "./authz";
-import type { Cadence, Depth, GlobalRole, GrantRole, RefineAnswer, RefineResult } from "./types";
+import type { Cadence, Depth, GlobalRole, GrantRole, RefineAnswer, RefineResult, WatchlistEntry } from "./types";
 import { logger, newRequestId, serializeError } from "./logger";
 
 /** Every server action runs inside a correlated span so it's traceable in logs. */
@@ -142,21 +141,29 @@ export async function updateSettingsAction(hypcheckId: string, formData: FormDat
   const { viewer } = await requireHypcheckAccess(hypcheckId, "editor");
   const log = actionLogger("updateSettings", { userId: viewer.id, hypcheckId });
   await log.span("action.updateSettings", async () => {
-    // The settings form edits names comma-separated; preserve the stored
-    // reason for any name that survives the edit.
-    const current = await getHypcheck(hypcheckId);
-    const reasonByName = new Map((current?.watchlist ?? []).map((w) => [w.name.toLowerCase(), w.reason]));
-    const watchlistRaw = String(formData.get("watchlist") ?? "");
+    // The watchlist editor serializes its full name+reason+category state into
+    // this hidden field, so reasons round-trip instead of being reconstructed
+    // by matching names against what was previously stored.
+    let raw: Array<{ name?: string; reason?: string; category?: WatchlistEntry["category"] }> = [];
+    try {
+      raw = JSON.parse(String(formData.get("watchlistJson") ?? "[]"));
+    } catch {
+      raw = [];
+    }
+    const seen = new Set<string>();
+    const watchlist: WatchlistEntry[] = raw
+      .map((e) => ({ name: (e.name ?? "").trim(), reason: (e.reason ?? "").trim(), category: e.category }))
+      .filter((e) => {
+        if (!e.name || seen.has(e.name.toLowerCase())) return false;
+        seen.add(e.name.toLowerCase());
+        return true;
+      });
     await updateHypcheckSettings(hypcheckId, {
       name: String(formData.get("name") ?? "").trim() || undefined,
       cadence: (formData.get("cadence") as Cadence) || undefined,
       depth: (formData.get("depth") as Depth) || undefined,
       status: (formData.get("status") as "active" | "paused") || undefined,
-      watchlist: watchlistRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((name) => ({ name, reason: reasonByName.get(name.toLowerCase()) ?? "" })),
+      watchlist,
     });
     revalidatePath("/", "layout");
     redirect(`/hypcheck/${hypcheckId}`);
