@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { executeRun, refineHypothesis } from "./engine";
 import {
+  addAllowedEmail,
   addVersion,
   applyWatchlistChange,
   createHypcheck,
@@ -14,6 +15,7 @@ import {
   getInsight,
   getUserByEmail,
   grantAccess,
+  removeAllowedEmail,
   revokeAccess,
   revokeInvitation,
   setInsightStatus,
@@ -284,4 +286,43 @@ export async function updateUserRoleAction(userId: string, formData: FormData): 
   // (defaultValue), so an in-place RSC patch never updates its displayed
   // value — force a real navigation.
   redirect("/admin");
+}
+
+/**
+ * Add (or re-invite) an email to the global allowlist at a starting role —
+ * the admin-console alternative to editing ALLOWED_EMAILS and redeploying.
+ * If that email already has an account, sync its role immediately too:
+ * otherwise the chosen role would only apply on a signup that's already
+ * happened.
+ */
+export async function addAllowedEmailAction(formData: FormData): Promise<void> {
+  const viewer = await requireAdmin();
+  const log = actionLogger("addAllowedEmail", { userId: viewer.id });
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const role = String(formData.get("role") ?? "member") as GlobalRole;
+  if (!email) redirect(`/admin?roleError=${encodeURIComponent("Enter an email address to add")}`);
+  if (!["admin", "creator", "member"].includes(role)) return;
+  await addAllowedEmail(email, role, viewer.id);
+  const existing = await getUserByEmail(email);
+  if (existing) await updateUserRole(existing.id, role);
+  log.info("admin.allowedEmail.added", { email, role, existingAccount: Boolean(existing) });
+  revalidatePath("/admin");
+}
+
+/**
+ * Revoke an email's access. Checked on every request (getViewer), so an
+ * already-signed-in user is signed out on their very next one. An admin
+ * can't revoke their own access — same reasoning as not being able to
+ * demote themselves out of the only admin seat.
+ */
+export async function removeAllowedEmailAction(email: string): Promise<void> {
+  const viewer = await requireAdmin();
+  const log = actionLogger("removeAllowedEmail", { userId: viewer.id });
+  const normalized = email.trim().toLowerCase();
+  if (normalized === viewer.email.trim().toLowerCase()) {
+    redirect(`/admin?roleError=${encodeURIComponent("You can't remove your own access")}`);
+  }
+  await removeAllowedEmail(normalized);
+  log.info("admin.allowedEmail.removed", { email: normalized });
+  revalidatePath("/admin");
 }

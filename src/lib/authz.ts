@@ -39,7 +39,7 @@ export async function getViewer(): Promise<Viewer | null> {
   if (!session?.user) return null;
   // Re-check the invite list on every read so removing an email revokes
   // access immediately, not just at signup.
-  if (!isEmailAllowed(session.user.email)) return null;
+  if (!(await isEmailAllowed(session.user.email))) return null;
   return {
     id: session.user.id,
     email: session.user.email,

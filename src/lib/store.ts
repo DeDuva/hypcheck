@@ -1,5 +1,6 @@
 import { getDb, newId } from "./db";
 import type {
+  AllowedEmail,
   Cadence,
   Depth,
   GlobalRole,
@@ -71,6 +72,16 @@ function rowToInvitation(r: Row): HypcheckInvitation {
     email: r.email as string,
     role: r.role as GrantRole,
     invitedBy: r.invited_by as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+function rowToAllowedEmail(r: Row): AllowedEmail {
+  return {
+    id: r.id as string,
+    email: r.email as string,
+    role: r.role as GlobalRole,
+    addedBy: r.added_by as string,
     createdAt: r.created_at as string,
   };
 }
@@ -440,6 +451,47 @@ export async function activatePendingInvitations(userId: string, email: string):
   }
   await db.execute({ sql: "DELETE FROM hypcheck_invitations WHERE email = ?", args: [email] });
   return invitations.length;
+}
+
+// ---------------------------------------------------------------------------
+// Allowed emails (allowed_emails) — the DB-backed, admin-editable invite
+// list. Gates sign-in the same way the ALLOWED_EMAILS env var always has
+// (see auth.ts isEmailAllowed); the env var still works as a parallel,
+// deploy-time bootstrap path for the very first admin.
+// ---------------------------------------------------------------------------
+
+export async function listAllowedEmails(): Promise<AllowedEmail[]> {
+  const db = await getDb();
+  const res = await db.execute("SELECT * FROM allowed_emails ORDER BY created_at ASC");
+  return res.rows.map((r) => rowToAllowedEmail(r as Row));
+}
+
+export async function getAllowedEmail(email: string): Promise<AllowedEmail | null> {
+  const db = await getDb();
+  const res = await db.execute({
+    sql: "SELECT * FROM allowed_emails WHERE email = ?",
+    args: [email.trim().toLowerCase()],
+  });
+  return res.rows[0] ? rowToAllowedEmail(res.rows[0] as Row) : null;
+}
+
+/** Add or re-invite an email at a given starting role. Idempotent — adding
+ * an already-allowed email updates its role rather than erroring. */
+export async function addAllowedEmail(email: string, role: GlobalRole, addedBy: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO allowed_emails (id, email, role, added_by, created_at)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(email) DO UPDATE SET role = excluded.role, added_by = excluded.added_by`,
+    args: [newId(), email.trim().toLowerCase(), role, addedBy, new Date().toISOString()],
+  });
+}
+
+/** Revoke an email's access. Checked on every request (getViewer), so this
+ * signs an already-active user out on their very next one. */
+export async function removeAllowedEmail(email: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({ sql: "DELETE FROM allowed_emails WHERE email = ?", args: [email.trim().toLowerCase()] });
 }
 
 // ---------------------------------------------------------------------------
