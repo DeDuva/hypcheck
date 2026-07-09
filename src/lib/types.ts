@@ -115,6 +115,18 @@ export interface HypcheckInvitation {
   createdAt: string;
 }
 
+/** An email allowed to sign in at all, with the GlobalRole it starts at —
+ * the DB-backed, admin-editable form of the ALLOWED_EMAILS env var. Checked
+ * on every request (see auth.ts isEmailAllowed), so removing a row revokes
+ * access immediately, same as removing an env var entry always has. */
+export interface AllowedEmail {
+  id: string;
+  email: string;
+  role: GlobalRole;
+  addedBy: string;
+  createdAt: string;
+}
+
 export interface HypothesisVersion {
   id: string;
   hypcheckId: string;
