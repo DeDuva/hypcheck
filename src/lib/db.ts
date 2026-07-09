@@ -91,6 +91,13 @@ CREATE TABLE IF NOT EXISTS app_meta (
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS allowed_emails (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL DEFAULT 'member',
+  added_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS "user" (
   "id" TEXT PRIMARY KEY,
   "name" TEXT NOT NULL,
@@ -143,6 +150,7 @@ CREATE INDEX IF NOT EXISTS idx_access_hypcheck ON hypcheck_access(hypcheck_id);
 CREATE INDEX IF NOT EXISTS idx_access_user ON hypcheck_access(user_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_hypcheck ON hypcheck_invitations(hypcheck_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_email ON hypcheck_invitations(email);
+CREATE INDEX IF NOT EXISTS idx_allowed_emails_email ON allowed_emails(email);
 `;
 
 // Indexes on columns added via MIGRATIONS (below) rather than in the initial
@@ -198,6 +206,32 @@ async function migrate(client: Client): Promise<void> {
   }
 }
 
+/**
+ * The allowed_emails table gates sign-in the same way ALLOWED_EMAILS always
+ * has (see auth.ts isEmailAllowed) — so on the database that first sees this
+ * table, every account that already exists must be backfilled in, or their
+ * next request would find them suddenly locked out. Runs exactly once per
+ * database (guarded by the pre-existence check in init()), so an admin who
+ * later empties the table on purpose to revoke everyone doesn't get
+ * silently undone on the next cold start.
+ */
+async function backfillAllowedEmails(client: Client): Promise<void> {
+  const users = await client.execute(`SELECT id, email, role FROM "user"`);
+  if (users.rows.length === 0) return;
+  const now = new Date().toISOString();
+  await client.batch(
+    users.rows.map((r) => {
+      const row = r as Record<string, unknown>;
+      return {
+        sql: `INSERT OR IGNORE INTO allowed_emails (id, email, role, added_by, created_at) VALUES (?, ?, ?, 'migration', ?)`,
+        args: [newId(), (row.email as string).toLowerCase(), row.role as string, now],
+      };
+    }),
+    "write"
+  );
+  logger.info("db.migrate.backfillAllowedEmails", { count: users.rows.length });
+}
+
 function stmtText(stmt: InStatement): string {
   const sql = typeof stmt === "string" ? stmt : stmt.sql;
   return sql.replace(/\s+/g, " ").trim().slice(0, 120);
@@ -236,6 +270,13 @@ async function init(): Promise<Client> {
     client = createClient({ url: `file:${path.join(dir, "hypcheck.db")}` });
   }
   try {
+    // Checked before the schema batch creates the table, so this only fires
+    // once — the first time this database sees allowed_emails at all.
+    const preExisting = await client.execute(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'allowed_emails'`
+    );
+    const allowedEmailsIsNew = preExisting.rows.length === 0;
+
     // Batch the schema (idempotent CREATEs) into ONE round trip. Sequential
     // execution was ~13 round trips — punishing on a cross-region DB and a
     // prime suspect for cold-start functions exceeding their time budget.
@@ -245,6 +286,7 @@ async function init(): Promise<Client> {
     await client.batch(schemaStatements, "write");
     await migrate(client);
     await client.execute(POST_MIGRATION_INDEXES);
+    if (allowedEmailsIsNew) await backfillAllowedEmails(client);
     instrument(client);
     logger.info("db.init", { backend, ms: Date.now() - start, statements: schemaStatements.length });
     return client;
