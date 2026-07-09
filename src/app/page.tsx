@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
   const viewer = await requireUser();
+  const canCreate = viewer.role !== "member";
   const hypchecks = await listHypchecks(viewer);
   const cards = await Promise.all(
     hypchecks.map(async (h) => {
@@ -29,15 +30,17 @@ export default async function Dashboard() {
             Longitudinal product-market-fit signal across your hypotheses.
           </p>
         </div>
-        <Link
-          href="/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-iris px-3.5 py-2 text-[13px] font-medium text-white shadow-card transition-colors hover:bg-iris-deep"
-        >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-          New hypcheck
-        </Link>
+        {canCreate && (
+          <Link
+            href="/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-iris px-3.5 py-2 text-[13px] font-medium text-white shadow-card transition-colors hover:bg-iris-deep"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            New hypcheck
+          </Link>
+        )}
       </div>
 
       {cards.length === 0 ? (
@@ -49,15 +52,18 @@ export default async function Dashboard() {
           </span>
           <h2 className="mt-4 text-[16px] font-semibold">No hypchecks yet</h2>
           <p className="mt-1.5 max-w-sm text-[13.5px] leading-relaxed text-ink-soft">
-            Define a product hypothesis and Hypcheck will research the market on a schedule, score PMF signal, and
-            track it over time.
+            {canCreate
+              ? "Define a product hypothesis and Hypcheck will research the market on a schedule, score PMF signal, and track it over time."
+              : "Nothing has been shared with you yet. Ask an admin or creator to invite you to a hypcheck."}
           </p>
-          <Link
-            href="/new"
-            className="mt-6 rounded-lg bg-iris px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-iris-deep"
-          >
-            Create your first hypcheck
-          </Link>
+          {canCreate && (
+            <Link
+              href="/new"
+              className="mt-6 rounded-lg bg-iris px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-iris-deep"
+            >
+              Create your first hypcheck
+            </Link>
+          )}
         </div>
       ) : (
         <div className="mt-8 grid gap-4 lg:grid-cols-2">

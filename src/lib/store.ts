@@ -2,6 +2,7 @@ import { getDb, newId } from "./db";
 import type {
   Cadence,
   Depth,
+  GlobalRole,
   GrantRole,
   Hypcheck,
   HypcheckAccessGrant,
@@ -24,11 +25,16 @@ import { CADENCE_DAYS } from "./types";
 type Row = Record<string, unknown>;
 
 /** Watchlists stored before phase 3 are plain string arrays — normalize both
- * shapes to WatchlistEntry so callers never see the difference. */
+ * shapes to WatchlistEntry so callers never see the difference. `category` is
+ * absent on entries created before that field existed or added manually. */
 function parseWatchlist(json: string): WatchlistEntry[] {
-  const raw = JSON.parse(json || "[]") as Array<string | { name?: string; reason?: string }>;
+  const raw = JSON.parse(json || "[]") as Array<string | { name?: string; reason?: string; category?: WatchlistEntry["category"] }>;
   return raw
-    .map((e) => (typeof e === "string" ? { name: e, reason: "" } : { name: e.name ?? "", reason: e.reason ?? "" }))
+    .map((e) =>
+      typeof e === "string"
+        ? { name: e, reason: "" }
+        : { name: e.name ?? "", reason: e.reason ?? "", category: e.category }
+    )
     .filter((e) => e.name);
 }
 
@@ -325,6 +331,39 @@ export async function getUserById(userId: string): Promise<{ id: string; email: 
   const res = await db.execute({ sql: `SELECT id, email, name FROM "user" WHERE id = ?`, args: [userId] });
   const row = res.rows[0] as Row | undefined;
   return row ? { id: row.id as string, email: row.email as string, name: row.name as string } : null;
+}
+
+export interface UserSummary {
+  id: string;
+  email: string;
+  name: string;
+  role: GlobalRole;
+  createdAt: string;
+}
+
+/** Every account, for the global admin console. */
+export async function listUsers(): Promise<UserSummary[]> {
+  const db = await getDb();
+  const res = await db.execute(`SELECT id, email, name, role, "createdAt" FROM "user" ORDER BY "createdAt" ASC`);
+  return res.rows.map((r) => {
+    const row = r as Row;
+    return {
+      id: row.id as string,
+      email: row.email as string,
+      name: row.name as string,
+      role: row.role as GlobalRole,
+      createdAt: row.createdAt as string,
+    };
+  });
+}
+
+/** Change a user's global role — the only way to promote someone to creator/admin. */
+export async function updateUserRole(userId: string, role: GlobalRole): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `UPDATE "user" SET role = ?, "updatedAt" = ? WHERE id = ?`,
+    args: [role, new Date().toISOString(), userId],
+  });
 }
 
 export interface HypcheckAccessGrantWithUser extends HypcheckAccessGrant {

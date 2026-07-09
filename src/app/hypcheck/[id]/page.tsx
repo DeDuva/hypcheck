@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listInsights, listMetrics, listRuns, listVersions } from "@/lib/store";
-import { CADENCE_LABELS, DEPTH_LABELS, scoreBand } from "@/lib/types";
+import { CADENCE_LABELS, DEPTH_LABELS, scoreBand, WATCHLIST_CATEGORY_LABELS } from "@/lib/types";
 import { formatDate, formatDateShort, relativeDays } from "@/lib/format";
 import { PmfChart, type ChartPoint } from "@/components/PmfChart";
 import { ModeBadge, ScoreChip } from "@/components/ScoreChip";
@@ -20,7 +20,8 @@ export const maxDuration = 800;
 
 export default async function HypcheckOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { hypcheck } = await requireHypcheckAccess(id, "viewer");
+  const { hypcheck, role } = await requireHypcheckAccess(id, "viewer");
+  const canEdit = role === "editor" || role === "owner" || role === "admin";
 
   const [runs, versions, insights, metrics] = await Promise.all([
     listRuns(id),
@@ -78,15 +79,17 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/hypcheck/${id}/settings`}
-            className="rounded-lg bg-surface px-3.5 py-2 text-[13px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper"
-          >
-            Settings
-          </Link>
-          <RunNowButton hypcheckId={id} live={Boolean(process.env.ANTHROPIC_API_KEY)} />
-        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/hypcheck/${id}/settings`}
+              className="rounded-lg bg-surface px-3.5 py-2 text-[13px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper"
+            >
+              Settings
+            </Link>
+            <RunNowButton hypcheckId={id} live={Boolean(process.env.ANTHROPIC_API_KEY)} />
+          </div>
+        )}
       </div>
 
       {/* Score summary + hypothesis */}
@@ -331,19 +334,21 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
               {hypcheck.watchlist.length > 0 && (
                 <>
                   <h3 className="mt-4 text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Watchlist</h3>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <ul className="mt-2 space-y-1.5">
                     {hypcheck.watchlist.map((w) => (
-                      <span
-                        key={w.name}
-                        title={w.reason || undefined}
-                        className={`rounded-full bg-paper px-2.5 py-1 text-[12px] font-medium text-ink-soft ring-1 ring-inset ring-edge ${
-                          w.reason ? "cursor-help" : ""
-                        }`}
-                      >
-                        {w.name}
-                      </span>
+                      <li key={w.name} className="flex items-start justify-between gap-3 text-[12.5px]">
+                        <span>
+                          <span className="font-medium text-ink">{w.name}</span>
+                          {w.reason && <span className="text-ink-faint"> — {w.reason}</span>}
+                        </span>
+                        {w.category && (
+                          <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-faint ring-1 ring-inset ring-edge">
+                            {WATCHLIST_CATEGORY_LABELS[w.category]}
+                          </span>
+                        )}
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </>
               )}
             </div>

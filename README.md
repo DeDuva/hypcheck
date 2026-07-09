@@ -65,9 +65,9 @@ Every user has a global role — `admin`, `creator`, or `member` — plus, per h
 - **editor** / **viewer** — an explicit grant in `hypcheck_access`.
 - Hypchecks created before phase 2 have no owner and are grandfathered as shared/editable, so existing data doesn't change behavior.
 
-Grant matrix: only an owner/admin can grant `editor`; an `editor` can grant `viewer`. `member`s cannot create hypchecks. The sharing UI (phase 3) isn't built yet — grants are made via `grantHypcheckAccessAction`/`revokeHypcheckAccessAction` (`src/lib/actions.ts`).
+Grant matrix: only an owner/admin can grant `editor`; an `editor` can grant `viewer`. `member`s cannot create hypchecks. Each hypcheck's Settings page lists members and invitations, and lets an owner/admin/editor change a member's grant (`editor`/`viewer`) or remove them — backed by `grantHypcheckAccessAction`/`updateAccessRoleAction`/`revokeHypcheckAccessAction` (`src/lib/actions.ts`).
 
-New signups are bootstrapped as `member` — least-privilege, no ability to create hypchecks — and get exactly what their per-hypcheck grant or pending invitation says. There's no admin console yet, so promoting someone to `creator`/`admin` is a direct SQL update against the `user` table.
+New signups are bootstrapped as `member` — least-privilege, no ability to create hypchecks — and get exactly what their per-hypcheck grant or pending invitation says. Promoting someone to `creator`/`admin` is done from the `/admin` console (admin-only, `src/app/admin/page.tsx`).
 
 Enforcement supports a **shadow mode**: denials are logged (`authz.hypcheck.denied` / `authz.create.denied`) but not blocked unless `HYPCHECK_ENFORCE_ROLES=enforce` is set. Production has `HYPCHECK_ENFORCE_ROLES=enforce` set, so denials are real blocks there.
 
