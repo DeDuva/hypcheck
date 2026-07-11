@@ -27,7 +27,7 @@ import type {
   WatchlistChange,
   WatchlistEntry,
 } from "./types";
-import { CADENCE_DAYS, DEFAULT_MODEL_FAMILY, GRANTABLE_MODEL_FAMILIES } from "./types";
+import { CADENCE_DAYS, DEFAULT_MODEL_FAMILY, DEFAULT_MODEL_TIER, MODEL_FAMILIES } from "./types";
 
 type Row = Record<string, unknown>;
 
@@ -61,16 +61,9 @@ function rowToHypcheck(r: Row): Hypcheck {
   };
 }
 
-/** Parse a user's model_access JSON column into a clean extra-grants list. */
-function parseModelAccess(raw: unknown): ModelFamily[] {
-  if (typeof raw !== "string" || !raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((f): f is ModelFamily => GRANTABLE_MODEL_FAMILIES.includes(f as ModelFamily));
-  } catch {
-    return [];
-  }
+/** Parse a user's model_access column: the highest tier they've been granted. */
+function parseModelTier(raw: unknown): ModelFamily {
+  return typeof raw === "string" && MODEL_FAMILIES.includes(raw as ModelFamily) ? (raw as ModelFamily) : DEFAULT_MODEL_TIER;
 }
 
 function rowToGrant(r: Row): HypcheckAccessGrant {
@@ -413,7 +406,7 @@ export interface UserSummary {
   name: string;
   role: GlobalRole;
   createdAt: string;
-  modelAccess: ModelFamily[]; // extra families granted beyond the base set
+  modelTier: ModelFamily; // highest family this user is granted; access is every family up through it
 }
 
 /** Every account, for the global admin console. */
@@ -428,7 +421,7 @@ export async function listUsers(): Promise<UserSummary[]> {
       name: row.name as string,
       role: row.role as GlobalRole,
       createdAt: row.createdAt as string,
-      modelAccess: parseModelAccess(row.model_access),
+      modelTier: parseModelTier(row.model_access),
     };
   });
 }
@@ -442,20 +435,19 @@ export async function updateUserRole(userId: string, role: GlobalRole): Promise<
   });
 }
 
-/** Extra model-family grants for one user (admin-managed; base families need no grant). */
-export async function getModelAccess(userId: string): Promise<ModelFamily[]> {
+/** The highest model family this user is granted (admin-managed; Haiku needs no grant). */
+export async function getModelTier(userId: string): Promise<ModelFamily> {
   const db = await getDb();
   const res = await db.execute({ sql: `SELECT model_access FROM "user" WHERE id = ?`, args: [userId] });
-  return parseModelAccess((res.rows[0] as Row | undefined)?.model_access);
+  return parseModelTier((res.rows[0] as Row | undefined)?.model_access);
 }
 
-/** Replace a user's extra model-family grants (admin console). */
-export async function updateModelAccess(userId: string, extras: ModelFamily[]): Promise<void> {
+/** Set a user's model access tier — grants that family and every cheaper one below it. */
+export async function updateModelTier(userId: string, tier: ModelFamily): Promise<void> {
   const db = await getDb();
-  const clean = [...new Set(extras.filter((f) => GRANTABLE_MODEL_FAMILIES.includes(f)))];
   await db.execute({
     sql: `UPDATE "user" SET model_access = ?, "updatedAt" = ? WHERE id = ?`,
-    args: [clean.length ? JSON.stringify(clean) : null, new Date().toISOString(), userId],
+    args: [tier === DEFAULT_MODEL_TIER ? null : tier, new Date().toISOString(), userId],
   });
 }
 

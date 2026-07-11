@@ -103,13 +103,12 @@ export interface Hypcheck {
  */
 export type ModelFamily = "haiku" | "sonnet" | "opus" | "fable";
 
+// Deliberately ordered cheapest/fastest → most capable — this order IS the
+// tier ladder. A user's access is "up through tier N", not an arbitrary set.
 export const MODEL_FAMILIES: ModelFamily[] = ["haiku", "sonnet", "opus", "fable"];
 
-/** Families every creator can use without an admin grant. */
-export const BASE_MODEL_FAMILIES: ModelFamily[] = ["haiku"];
-
-/** Families an admin can additionally enable per user. */
-export const GRANTABLE_MODEL_FAMILIES: ModelFamily[] = ["sonnet", "opus", "fable"];
+/** Every creator can use Haiku without an admin grant; it's the access floor. */
+export const DEFAULT_MODEL_TIER: ModelFamily = "haiku";
 
 export const MODEL_FAMILY_LABELS: Record<ModelFamily, string> = {
   haiku: "Haiku — fastest, most cost-effective",
@@ -117,6 +116,12 @@ export const MODEL_FAMILY_LABELS: Record<ModelFamily, string> = {
   opus: "Opus — most capable Opus-tier",
   fable: "Fable — most capable, premium",
 };
+
+/** All families at or below `tier`, in ladder order (e.g. "opus" → haiku, sonnet, opus). */
+export function familiesUpToTier(tier: ModelFamily): ModelFamily[] {
+  const cutoff = MODEL_FAMILIES.indexOf(tier);
+  return MODEL_FAMILIES.slice(0, cutoff + 1);
+}
 
 export const DEFAULT_MODEL_FAMILY: ModelFamily = "sonnet";
 
