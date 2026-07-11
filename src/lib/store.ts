@@ -240,6 +240,8 @@ export interface CreateHypcheckInput {
   statement: string;
   cadence: Cadence;
   depth: Depth;
+  /** Model family for research runs. Callers pass the best family the creator is allowed. */
+  model?: ModelFamily;
   watchlist: WatchlistEntry[];
   metrics: Array<{ name: string; description: string; weight: number; signals?: string; direction?: string }>;
   refinement?: RefinementNotes | null;
@@ -250,13 +252,14 @@ export async function createHypcheck(input: CreateHypcheckInput, ownerId: string
   const id = newId();
   const now = new Date().toISOString();
   await db.execute({
-    sql: `INSERT INTO hypchecks (id, name, status, cadence, depth, watchlist, created_at, next_run_at, owner_id, refinement)
-          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO hypchecks (id, name, status, cadence, depth, model, watchlist, created_at, next_run_at, owner_id, refinement)
+          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       input.name,
       input.cadence,
       input.depth,
+      input.model ?? DEFAULT_MODEL_FAMILY,
       JSON.stringify(input.watchlist),
       now,
       now,

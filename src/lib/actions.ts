@@ -20,6 +20,7 @@ import {
   revokeInvitation,
   setInsightStatus,
   setLastRunAttempt,
+  getModelAccess,
   updateHypcheckSettings,
   updateModelAccess,
   updateUserRole,
@@ -49,7 +50,11 @@ export async function createHypcheckAction(input: CreateHypcheckInput): Promise<
   const viewer = await requireCanCreateHypcheck();
   const log = actionLogger("createHypcheck", { userId: viewer.id, name: input.name, metricCount: input.metrics.length });
   await log.span("action.createHypcheck", async () => {
-    const hypcheck = await createHypcheck(input, viewer.id);
+    // New hypchecks start on the best default the creator is allowed: sonnet
+    // when granted, else the base family. Ignores any client-supplied value.
+    const allowed = await allowedModelFamilies(viewer);
+    const model: ModelFamily = allowed.includes("sonnet") ? "sonnet" : "haiku";
+    const hypcheck = await createHypcheck({ ...input, model }, viewer.id);
     log.info("hypcheck.created", { hypcheckId: hypcheck.id });
     // The first run (especially live research) can take well past a platform
     // request timeout, so don't block navigation on it — the overview page
@@ -283,12 +288,10 @@ export async function revokeInvitationAction(hypcheckId: string, email: string):
 }
 
 /**
- * Change a user's global role and model access — the only way to promote
- * someone to creator/admin now that signups no longer bootstrap as admin.
- * Admin-only, and an admin can't demote themselves — that's how you'd end up
- * with zero admins able to undo it. Model access rides in the same form:
- * every creator gets the base families (haiku, sonnet); the checkboxes grant
- * the premium ones (opus, fable) per user.
+ * Change a user's global role — the only way to promote someone to
+ * creator/admin now that signups no longer bootstrap as admin. Admin-only,
+ * and an admin can't demote themselves — that's how you'd end up with zero
+ * admins able to undo it.
  */
 export async function updateUserRoleAction(userId: string, formData: FormData): Promise<void> {
   const viewer = await requireAdmin();
@@ -298,15 +301,29 @@ export async function updateUserRoleAction(userId: string, formData: FormData): 
   if (userId === viewer.id) {
     redirect(`/admin?roleError=${encodeURIComponent("You can't change your own role")}`);
   }
-  const extras = GRANTABLE_MODEL_FAMILIES.filter((f) => formData.get(`model_${f}`) === "on");
   await updateUserRole(userId, role);
-  await updateModelAccess(userId, extras);
-  log.info("user.role.changed", { targetUserId: userId, role, modelAccess: extras });
+  log.info("user.role.changed", { targetUserId: userId, role });
   revalidatePath("/admin");
   // Same fix as updateAccessRoleAction: the role <select> is uncontrolled
   // (defaultValue), so an in-place RSC patch never updates its displayed
   // value — force a real navigation.
   redirect("/admin");
+}
+
+/**
+ * Flip one model-family grant for one user — each pill in the admin console
+ * is its own instant toggle, so there's no ambiguous shared "Update" button.
+ * Base families (haiku) need no grant and can't be revoked here.
+ */
+export async function toggleModelAccessAction(userId: string, family: ModelFamily): Promise<void> {
+  const viewer = await requireAdmin();
+  const log = actionLogger("toggleModelAccess", { userId: viewer.id, targetUserId: userId, family });
+  if (!GRANTABLE_MODEL_FAMILIES.includes(family)) return;
+  const current = await getModelAccess(userId);
+  const next = current.includes(family) ? current.filter((f) => f !== family) : [...current, family];
+  await updateModelAccess(userId, next);
+  log.info("user.modelAccess.changed", { targetUserId: userId, modelAccess: next });
+  revalidatePath("/admin");
 }
 
 /**

@@ -106,14 +106,14 @@ export type ModelFamily = "haiku" | "sonnet" | "opus" | "fable";
 export const MODEL_FAMILIES: ModelFamily[] = ["haiku", "sonnet", "opus", "fable"];
 
 /** Families every creator can use without an admin grant. */
-export const BASE_MODEL_FAMILIES: ModelFamily[] = ["haiku", "sonnet"];
+export const BASE_MODEL_FAMILIES: ModelFamily[] = ["haiku"];
 
 /** Families an admin can additionally enable per user. */
-export const GRANTABLE_MODEL_FAMILIES: ModelFamily[] = ["opus", "fable"];
+export const GRANTABLE_MODEL_FAMILIES: ModelFamily[] = ["sonnet", "opus", "fable"];
 
 export const MODEL_FAMILY_LABELS: Record<ModelFamily, string> = {
   haiku: "Haiku — fastest, most cost-effective",
-  sonnet: "Sonnet — balanced (default)",
+  sonnet: "Sonnet — balanced",
   opus: "Opus — most capable Opus-tier",
   fable: "Fable — most capable, premium",
 };
