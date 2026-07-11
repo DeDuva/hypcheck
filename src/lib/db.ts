@@ -202,6 +202,7 @@ const MIGRATIONS: Record<string, Record<string, string>> = {
   hypchecks: {
     owner_id: "TEXT",
     refinement: "TEXT",
+    model: "TEXT", // ModelFamily; null = default (sonnet)
   },
   metrics: {
     signals: "TEXT NOT NULL DEFAULT ''",
@@ -212,6 +213,7 @@ const MIGRATIONS: Record<string, Record<string, string>> = {
   },
   user: {
     role: "TEXT NOT NULL DEFAULT 'member'",
+    model_access: "TEXT", // JSON array of extra ModelFamily grants beyond the base set; null = none
   },
 };
 

@@ -13,6 +13,7 @@ import type {
   InsightDirection,
   Metric,
   MetricScore,
+  ModelFamily,
   RefinementNotes,
   Run,
   RunResult,
@@ -26,7 +27,7 @@ import type {
   WatchlistChange,
   WatchlistEntry,
 } from "./types";
-import { CADENCE_DAYS } from "./types";
+import { CADENCE_DAYS, DEFAULT_MODEL_FAMILY, GRANTABLE_MODEL_FAMILIES } from "./types";
 
 type Row = Record<string, unknown>;
 
@@ -51,12 +52,25 @@ function rowToHypcheck(r: Row): Hypcheck {
     status: r.status as Hypcheck["status"],
     cadence: r.cadence as Cadence,
     depth: r.depth as Depth,
+    model: (r.model as ModelFamily) ?? DEFAULT_MODEL_FAMILY,
     watchlist: parseWatchlist(r.watchlist as string),
     createdAt: r.created_at as string,
     nextRunAt: (r.next_run_at as string) ?? null,
     ownerId: (r.owner_id as string) ?? null,
     refinement: r.refinement ? (JSON.parse(r.refinement as string) as RefinementNotes) : null,
   };
+}
+
+/** Parse a user's model_access JSON column into a clean extra-grants list. */
+function parseModelAccess(raw: unknown): ModelFamily[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((f): f is ModelFamily => GRANTABLE_MODEL_FAMILIES.includes(f as ModelFamily));
+  } catch {
+    return [];
+  }
 }
 
 function rowToGrant(r: Row): HypcheckAccessGrant {
@@ -266,17 +280,25 @@ export async function createHypcheck(input: CreateHypcheckInput, ownerId: string
 
 export async function updateHypcheckSettings(
   id: string,
-  patch: { name?: string; cadence?: Cadence; depth?: Depth; watchlist?: WatchlistEntry[]; status?: "active" | "paused" }
+  patch: {
+    name?: string;
+    cadence?: Cadence;
+    depth?: Depth;
+    model?: ModelFamily;
+    watchlist?: WatchlistEntry[];
+    status?: "active" | "paused";
+  }
 ): Promise<void> {
   const db = await getDb();
   const current = await getHypcheck(id);
   if (!current) throw new Error("Hypcheck not found");
   await db.execute({
-    sql: `UPDATE hypchecks SET name = ?, cadence = ?, depth = ?, watchlist = ?, status = ? WHERE id = ?`,
+    sql: `UPDATE hypchecks SET name = ?, cadence = ?, depth = ?, model = ?, watchlist = ?, status = ? WHERE id = ?`,
     args: [
       patch.name ?? current.name,
       patch.cadence ?? current.cadence,
       patch.depth ?? current.depth,
+      patch.model ?? current.model,
       JSON.stringify(patch.watchlist ?? current.watchlist),
       patch.status ?? current.status,
       id,
@@ -388,12 +410,13 @@ export interface UserSummary {
   name: string;
   role: GlobalRole;
   createdAt: string;
+  modelAccess: ModelFamily[]; // extra families granted beyond the base set
 }
 
 /** Every account, for the global admin console. */
 export async function listUsers(): Promise<UserSummary[]> {
   const db = await getDb();
-  const res = await db.execute(`SELECT id, email, name, role, "createdAt" FROM "user" ORDER BY "createdAt" ASC`);
+  const res = await db.execute(`SELECT id, email, name, role, model_access, "createdAt" FROM "user" ORDER BY "createdAt" ASC`);
   return res.rows.map((r) => {
     const row = r as Row;
     return {
@@ -402,6 +425,7 @@ export async function listUsers(): Promise<UserSummary[]> {
       name: row.name as string,
       role: row.role as GlobalRole,
       createdAt: row.createdAt as string,
+      modelAccess: parseModelAccess(row.model_access),
     };
   });
 }
@@ -412,6 +436,23 @@ export async function updateUserRole(userId: string, role: GlobalRole): Promise<
   await db.execute({
     sql: `UPDATE "user" SET role = ?, "updatedAt" = ? WHERE id = ?`,
     args: [role, new Date().toISOString(), userId],
+  });
+}
+
+/** Extra model-family grants for one user (admin-managed; base families need no grant). */
+export async function getModelAccess(userId: string): Promise<ModelFamily[]> {
+  const db = await getDb();
+  const res = await db.execute({ sql: `SELECT model_access FROM "user" WHERE id = ?`, args: [userId] });
+  return parseModelAccess((res.rows[0] as Row | undefined)?.model_access);
+}
+
+/** Replace a user's extra model-family grants (admin console). */
+export async function updateModelAccess(userId: string, extras: ModelFamily[]): Promise<void> {
+  const db = await getDb();
+  const clean = [...new Set(extras.filter((f) => GRANTABLE_MODEL_FAMILIES.includes(f)))];
+  await db.execute({
+    sql: `UPDATE "user" SET model_access = ?, "updatedAt" = ? WHERE id = ?`,
+    args: [clean.length ? JSON.stringify(clean) : null, new Date().toISOString(), userId],
   });
 }
 

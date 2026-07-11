@@ -7,8 +7,8 @@ import {
   updateAccessRoleAction,
   updateSettingsAction,
 } from "@/lib/actions";
-import { CADENCE_LABELS, DEPTH_LABELS, type Cadence, type Depth } from "@/lib/types";
-import { requireHypcheckAccess } from "@/lib/authz";
+import { CADENCE_LABELS, DEPTH_LABELS, MODEL_FAMILY_LABELS, type Cadence, type Depth, type ModelFamily } from "@/lib/types";
+import { allowedModelFamilies, requireHypcheckAccess } from "@/lib/authz";
 import { getUserById, listAccessGrantsWithUsers, listInvitations } from "@/lib/store";
 import { WatchlistEditor } from "@/components/WatchlistEditor";
 
@@ -26,12 +26,19 @@ export default async function SettingsPage({
 }) {
   const { id } = await params;
   const { shareError } = await searchParams;
-  const { hypcheck, role } = await requireHypcheckAccess(id, "editor");
+  const { viewer, hypcheck, role } = await requireHypcheckAccess(id, "editor");
   const canDelete = role === "owner" || role === "admin";
   const canGrantEditor = role === "owner" || role === "admin";
   const grants = await listAccessGrantsWithUsers(id);
   const invitations = await listInvitations(id);
   const owner = hypcheck.ownerId ? await getUserById(hypcheck.ownerId) : null;
+  // Families this editor can pick. The hypcheck's current family is always
+  // shown even if this editor couldn't select it themselves (someone with
+  // broader access set it) — saving other settings must not clobber it.
+  const allowedModels = await allowedModelFamilies(viewer);
+  const modelOptions: ModelFamily[] = allowedModels.includes(hypcheck.model)
+    ? allowedModels
+    : [...allowedModels, hypcheck.model];
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10 lg:px-8">
@@ -98,6 +105,27 @@ export default async function SettingsPage({
               ))}
             </select>
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="model" className="text-[12.5px] font-semibold text-ink">
+            Research model
+          </label>
+          <p className="mt-0.5 text-[11.5px] text-ink-faint">
+            The model family used for this hypcheck&apos;s research runs — always the newest release in the family.
+          </p>
+          <select
+            id="model"
+            name="model"
+            defaultValue={hypcheck.model}
+            className="mt-1.5 w-full rounded-lg border border-edge bg-paper/50 px-3 py-2 text-[13.5px] outline-none transition-colors focus:border-iris focus:bg-surface"
+          >
+            {modelOptions.map((m) => (
+              <option key={m} value={m}>
+                {MODEL_FAMILY_LABELS[m]}
+              </option>
+            ))}
+          </select>
         </div>
 
         <WatchlistEditor initial={hypcheck.watchlist} />

@@ -3,7 +3,7 @@ import { addAllowedEmailAction, removeAllowedEmailAction, updateUserRoleAction }
 import { envAllowedEmails } from "@/lib/auth";
 import { requireAdmin } from "@/lib/authz";
 import { listAllowedEmails, listUsers } from "@/lib/store";
-import { GLOBAL_ROLE_LABELS, type GlobalRole } from "@/lib/types";
+import { GLOBAL_ROLE_LABELS, GRANTABLE_MODEL_FAMILIES, type GlobalRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +120,22 @@ export default async function AdminPage({
                           </option>
                         ))}
                       </select>
+                      <span
+                        className="flex items-center gap-2 rounded-lg border border-edge bg-paper/50 px-2.5 py-1.5"
+                        title="Premium model access — Haiku and Sonnet are always available; these grant Opus and Fable"
+                      >
+                        {GRANTABLE_MODEL_FAMILIES.map((f) => (
+                          <label key={f} className="flex cursor-pointer items-center gap-1 text-[11.5px] capitalize text-ink-soft">
+                            <input
+                              type="checkbox"
+                              name={`model_${f}`}
+                              defaultChecked={user.modelAccess.includes(f)}
+                              className="h-3 w-3 accent-[var(--color-iris)]"
+                            />
+                            {f}
+                          </label>
+                        ))}
+                      </span>
                       <button
                         type="submit"
                         className="rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-ink/80"

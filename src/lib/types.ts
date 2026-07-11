@@ -88,12 +88,37 @@ export interface Hypcheck {
   status: "active" | "paused";
   cadence: Cadence;
   depth: Depth;
+  model: ModelFamily; // resolved to the newest model in the family at run time
   watchlist: WatchlistEntry[]; // companies, products, competitive signals — with reasons
   createdAt: string; // ISO
   nextRunAt: string | null; // ISO
   ownerId: string | null; // null on hypchecks created before phase 2 (grandfathered, shared access)
   refinement: RefinementNotes | null; // null when created without AI refinement (or pre-feature)
 }
+
+/**
+ * Model selection is by FAMILY, not pinned model ID — the engine resolves a
+ * family to the newest model in it at run time (see lib/models.ts), so new
+ * releases are picked up without a config change.
+ */
+export type ModelFamily = "haiku" | "sonnet" | "opus" | "fable";
+
+export const MODEL_FAMILIES: ModelFamily[] = ["haiku", "sonnet", "opus", "fable"];
+
+/** Families every creator can use without an admin grant. */
+export const BASE_MODEL_FAMILIES: ModelFamily[] = ["haiku", "sonnet"];
+
+/** Families an admin can additionally enable per user. */
+export const GRANTABLE_MODEL_FAMILIES: ModelFamily[] = ["opus", "fable"];
+
+export const MODEL_FAMILY_LABELS: Record<ModelFamily, string> = {
+  haiku: "Haiku — fastest, most cost-effective",
+  sonnet: "Sonnet — balanced (default)",
+  opus: "Opus — most capable Opus-tier",
+  fable: "Fable — most capable, premium",
+};
+
+export const DEFAULT_MODEL_FAMILY: ModelFamily = "sonnet";
 
 export interface HypcheckAccessGrant {
   id: string;

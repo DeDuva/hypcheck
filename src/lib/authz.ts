@@ -1,8 +1,9 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { auth, devOpenMode, isEmailAllowed } from "./auth";
-import { ensureUserRow, getAccessGrant, getHypcheck } from "./store";
-import type { GlobalRole, Hypcheck } from "./types";
+import { ensureUserRow, getAccessGrant, getHypcheck, getModelAccess } from "./store";
+import type { GlobalRole, Hypcheck, ModelFamily } from "./types";
+import { BASE_MODEL_FAMILIES, MODEL_FAMILIES } from "./types";
 import { logger } from "./logger";
 
 /** The authenticated caller, as seen by pages, actions, and route handlers. */
@@ -132,4 +133,14 @@ export async function requireAdmin(): Promise<Viewer> {
     redirect("/");
   }
   return viewer;
+}
+
+/**
+ * The model families this viewer may select on a hypcheck: the base set plus
+ * any admin-granted extras (opus/fable). Admins implicitly get everything.
+ */
+export async function allowedModelFamilies(viewer: Viewer): Promise<ModelFamily[]> {
+  if (viewer.role === "admin") return MODEL_FAMILIES;
+  const extras = await getModelAccess(viewer.id);
+  return [...BASE_MODEL_FAMILIES, ...extras];
 }
