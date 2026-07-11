@@ -6,7 +6,11 @@ export function formatDateShort(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/** Date + time — disambiguates multiple runs on the same day without extra chrome. */
+/**
+ * Date + time — disambiguates multiple runs on the same day without extra chrome.
+ * Pinned to Pacific time rather than the server's ambient timezone (UTC on
+ * Vercel), so it renders the same everywhere instead of drifting per environment.
+ */
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
     month: "short",
@@ -14,6 +18,8 @@ export function formatDateTime(iso: string): string {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Los_Angeles",
+    timeZoneName: "short",
   });
 }
 
@@ -41,6 +47,17 @@ export function formatDelta(delta: number): string {
   const rounded = Math.round(delta * 10) / 10;
   if (rounded > 0) return `+${rounded}`;
   return String(rounded);
+}
+
+/** Compact duration, e.g. "340ms", "1.2s", "2m 05s". */
+export function formatMs(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60);
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
 export function relativeDays(iso: string): string {

@@ -189,6 +189,49 @@ export interface Run {
   telemetry: RunTelemetry;
 }
 
+export type TraceKind = "research" | "refine";
+export type TraceStatus = "running" | "ok" | "error";
+export type TraceSpanKind = "thinking" | "web_search_query" | "web_search_result" | "text_output" | "other";
+
+export interface TraceSpan {
+  id: string;
+  traceId: string;
+  seq: number;
+  kind: TraceSpanKind;
+  label: string;
+  startMs: number; // offset from trace start
+  durationMs: number;
+  inputText: string | null;
+  outputText: string | null;
+}
+
+/** A single timed phase within a trace, before it has a DB-assigned id/seq. */
+export interface SpanInput {
+  kind: TraceSpanKind;
+  label: string;
+  startMs: number;
+  durationMs: number;
+  inputText: string | null;
+  outputText: string | null;
+}
+
+export interface Trace {
+  id: string;
+  hypcheckId: string | null; // null for refine calls in the pre-creation wizard
+  runId: string | null; // null until the run row is recorded and linked
+  kind: TraceKind;
+  status: TraceStatus;
+  model: string;
+  startedAt: string; // ISO
+  durationMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  searches: number | null;
+  stopReason: string | null;
+  error: string | null;
+  requestText: string;
+}
+
 export interface Insight {
   id: string;
   runId: string;

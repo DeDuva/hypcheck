@@ -41,10 +41,17 @@ previews are for build/UI review; staging is where auth flows get exercised.
    - `BETTER_AUTH_URL` → the staging alias URL
    - `ALLOWED_EMAILS` → testers
    - `HYPCHECK_DEMO=1` if you want demo data
-   - **No `ANTHROPIC_API_KEY`** — staging uses the free simulated engine.
-     Auth/roles work never needs live research to test.
-4. Vercel cron only fires on production, so staging accrues no scheduled
-   spend. Test the cron path manually:
+   - `ANTHROPIC_API_KEY` → **set, scoped to Preview only.** Staging runs the
+     live engine (same as prod) so real research runs — and their
+     profiling traces at `/admin/traces` — can actually be exercised before
+     a change reaches prod. This means "Run now" and refine on staging spend
+     real tokens; a separate key from prod's is fine if you want spend
+     tracked apart.
+4. Vercel cron only fires on production, so staging accrues no *scheduled*
+   spend — but a manual "Run now" or hypothesis refine on staging does hit
+   the live engine and costs real tokens now that `ANTHROPIC_API_KEY` is
+   set. Test the cron path manually (still simulated unless you also trigger
+   it with the API key present):
    `curl -H "Authorization: Bearer $CRON_SECRET" https://<staging-alias>/api/cron`
 5. Preview deployments sit behind Vercel Deployment Protection by default
    (a Vercel login screen). Fine solo; disable it or share a bypass link if
@@ -83,6 +90,9 @@ where prod is either open or bricked:
   allowed. Watch prod logs for a few days, confirm nothing legitimate would
   break, then flip to `enforce`. Deny-by-default authorization is exactly
   the kind of change you want to observe before you trust it.
-- **Cost-affecting code paths get tested simulated.** Anything touching run
-  scheduling, cadence, or budgets is verified on staging (simulated engine,
-  no API key) before it can spend a token in prod.
+- **Cost-affecting code paths get tested live, on staging, before prod.**
+  Staging carries its own `ANTHROPIC_API_KEY` precisely so run scheduling,
+  cadence, budget, and profiling changes get exercised against the real
+  engine — with real (small, deliberate) spend — before they can affect
+  prod. Don't leave staging cron-triggered or scripted into looping runs;
+  manual "Run now" / refine clicks are the expected volume.
