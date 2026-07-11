@@ -13,7 +13,24 @@ import type {
 } from "../types";
 import { CADENCE_DAYS, DEPTH_LABELS, STANCE_LABELS } from "../types";
 import { buildReportMd } from "./report";
-import { Logger, logger as rootLogger } from "../logger";
+import { Logger, logger as rootLogger, serializeError } from "../logger";
+import { consumeTracedStream } from "./streamTrace";
+import { recordTrace, recordTraceError, type NewTrace } from "../store";
+
+/** Trace-write failures must never break a run — mirrors safeSetAttempt in engine/index.ts. */
+async function safeRecordTrace(
+  log: Logger,
+  trace: NewTrace,
+  spans: Parameters<typeof recordTrace>[1],
+  error: string | null
+): Promise<string | null> {
+  try {
+    return error ? await recordTraceError(trace, spans, error) : await recordTrace(trace, spans);
+  } catch (err) {
+    log.warn("trace.write_failed", { err: serializeError(err) });
+    return null;
+  }
+}
 
 // Sonnet is the default research model: ~2-3x faster than Opus at web-grounded
 // synthesis, which keeps a run (incl. the industry-analysis section) well under
@@ -43,6 +60,8 @@ export interface LiveRunOutput {
   telemetry: LiveTelemetry;
   /** The instant the run was assessed — persist this so the report body's date matches `runAt`. */
   runAt: Date;
+  /** The profiling trace for this call, for linking to the run row once it's recorded. */
+  traceId: string | null;
 }
 
 function webSearchRequests(usage: Anthropic.Usage): number | null {
@@ -321,9 +340,36 @@ export async function liveRun(
     },
     { signal: AbortSignal.timeout(RESEARCH_ABORT_MS) }
   );
-  const research = await stream.finalMessage();
+  const traced = await consumeTracedStream(stream, researchStart);
   const researchMs = Date.now() - researchStart;
+  if (!traced.ok) {
+    await safeRecordTrace(
+      log,
+      { hypcheckId: hypcheck.id, kind: "research", model: MODEL, startedAt: new Date(researchStart), requestText: researchPrompt, durationMs: researchMs },
+      traced.spans,
+      JSON.stringify(serializeError(traced.error))
+    );
+    throw traced.error;
+  }
+  const research = traced.message;
   const searches = webSearchRequests(research.usage);
+  const traceId = await safeRecordTrace(
+    log,
+    {
+      hypcheckId: hypcheck.id,
+      kind: "research",
+      model: MODEL,
+      startedAt: new Date(researchStart),
+      requestText: researchPrompt,
+      durationMs: researchMs,
+      inputTokens: research.usage.input_tokens,
+      outputTokens: research.usage.output_tokens,
+      searches,
+      stopReason: research.stop_reason,
+    },
+    traced.spans,
+    null
+  );
   await onPhase?.("research_done", { researchMs, searches });
   log.info("engine.research.done", {
     ms: researchMs,
@@ -474,6 +520,7 @@ export async function liveRun(
       searches,
     },
     runAt: runDate,
+    traceId,
   };
 }
 
@@ -628,9 +675,37 @@ export async function liveRefine(
     },
     { signal: AbortSignal.timeout(REFINE_ABORT_MS) }
   );
-  const response = await stream.finalMessage();
+  const traced = await consumeTracedStream(stream, start);
+  const ms = Date.now() - start;
+  if (!traced.ok) {
+    await safeRecordTrace(
+      log,
+      { hypcheckId: null, kind: "refine", model: MODEL, startedAt: new Date(start), requestText: prompt, durationMs: ms },
+      traced.spans,
+      JSON.stringify(serializeError(traced.error))
+    );
+    throw traced.error;
+  }
+  const response = traced.message;
+  await safeRecordTrace(
+    log,
+    {
+      hypcheckId: null,
+      kind: "refine",
+      model: MODEL,
+      startedAt: new Date(start),
+      requestText: prompt,
+      durationMs: ms,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      searches: webSearchRequests(response.usage),
+      stopReason: response.stop_reason,
+    },
+    traced.spans,
+    null
+  );
   log.info("engine.refine.done", {
-    ms: Date.now() - start,
+    ms,
     model: MODEL,
     round: answers.length ? 2 : 1,
     inputTokens: response.usage.input_tokens,

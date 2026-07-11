@@ -34,7 +34,15 @@ export default async function AdminPage({
         <span className="text-ink-soft">Admin</span>
       </div>
 
-      <h1 className="mt-2 text-[22px] font-semibold tracking-tight">Users</h1>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <h1 className="text-[22px] font-semibold tracking-tight">Users</h1>
+        <Link
+          href="/admin/traces"
+          className="rounded-lg border border-edge bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink-soft transition-colors hover:border-edge-strong hover:text-ink"
+        >
+          API call profiling →
+        </Link>
+      </div>
       <p className="mt-1 text-[12.5px] text-ink-faint">
         Global role controls whether a user can create hypchecks (<code className="font-mono">creator</code>/
         <code className="font-mono">admin</code>) or only see what&apos;s shared with them (

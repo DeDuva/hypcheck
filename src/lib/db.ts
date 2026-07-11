@@ -86,6 +86,33 @@ CREATE TABLE IF NOT EXISTS insights (
   status TEXT NOT NULL DEFAULT 'new',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS traces (
+  id TEXT PRIMARY KEY,
+  hypcheck_id TEXT REFERENCES hypchecks(id) ON DELETE CASCADE,
+  run_id TEXT REFERENCES runs(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  model TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  duration_ms REAL,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  searches INTEGER,
+  stop_reason TEXT,
+  error TEXT,
+  request_text TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS trace_spans (
+  id TEXT PRIMARY KEY,
+  trace_id TEXT NOT NULL REFERENCES traces(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  label TEXT NOT NULL,
+  start_ms REAL NOT NULL,
+  duration_ms REAL NOT NULL,
+  input_text TEXT,
+  output_text TEXT
+);
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
@@ -151,6 +178,9 @@ CREATE INDEX IF NOT EXISTS idx_access_user ON hypcheck_access(user_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_hypcheck ON hypcheck_invitations(hypcheck_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_email ON hypcheck_invitations(email);
 CREATE INDEX IF NOT EXISTS idx_allowed_emails_email ON allowed_emails(email);
+CREATE INDEX IF NOT EXISTS idx_traces_hypcheck ON traces(hypcheck_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_traces_run ON traces(run_id);
+CREATE INDEX IF NOT EXISTS idx_trace_spans_trace ON trace_spans(trace_id, seq);
 `;
 
 // Indexes on columns added via MIGRATIONS (below) rather than in the initial

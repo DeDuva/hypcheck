@@ -43,6 +43,17 @@ export function formatDelta(delta: number): string {
   return String(rounded);
 }
 
+/** Compact duration, e.g. "340ms", "1.2s", "2m 05s". */
+export function formatMs(ms: number | null): string {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60);
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
 export function relativeDays(iso: string): string {
   const days = Math.round((new Date(iso).getTime() - Date.now()) / (24 * 3600 * 1000));
   if (days === 0) return "today";
