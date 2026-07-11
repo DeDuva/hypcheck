@@ -20,16 +20,15 @@ import {
   revokeInvitation,
   setInsightStatus,
   setLastRunAttempt,
-  getModelAccess,
   updateHypcheckSettings,
-  updateModelAccess,
+  updateModelTier,
   updateUserRole,
   type CreateHypcheckInput,
 } from "./store";
 import { FALLBACK_LATEST } from "./models";
 import { allowedModelFamilies, requireAdmin, requireCanCreateHypcheck, requireHypcheckAccess, requireUser } from "./authz";
 import type { Cadence, Depth, GlobalRole, GrantRole, ModelFamily, RefineAnswer, RefineResult, WatchlistEntry } from "./types";
-import { GRANTABLE_MODEL_FAMILIES, MODEL_FAMILIES } from "./types";
+import { MODEL_FAMILIES } from "./types";
 import { logger, newRequestId, serializeError } from "./logger";
 
 /** Every server action runs inside a correlated span so it's traceable in logs. */
@@ -311,18 +310,17 @@ export async function updateUserRoleAction(userId: string, formData: FormData): 
 }
 
 /**
- * Flip one model-family grant for one user — each pill in the admin console
- * is its own instant toggle, so there's no ambiguous shared "Update" button.
- * Base families (haiku) need no grant and can't be revoked here.
+ * Set one user's model access tier — a rating-scale control in the admin
+ * console, Haiku (floor, always granted) through Fable. Picking a tier
+ * grants that family and every cheaper one below it; each click applies
+ * instantly, no shared "Update" button to wonder about.
  */
-export async function toggleModelAccessAction(userId: string, family: ModelFamily): Promise<void> {
+export async function setModelTierAction(userId: string, tier: ModelFamily): Promise<void> {
   const viewer = await requireAdmin();
-  const log = actionLogger("toggleModelAccess", { userId: viewer.id, targetUserId: userId, family });
-  if (!GRANTABLE_MODEL_FAMILIES.includes(family)) return;
-  const current = await getModelAccess(userId);
-  const next = current.includes(family) ? current.filter((f) => f !== family) : [...current, family];
-  await updateModelAccess(userId, next);
-  log.info("user.modelAccess.changed", { targetUserId: userId, modelAccess: next });
+  const log = actionLogger("setModelTier", { userId: viewer.id, targetUserId: userId, tier });
+  if (!MODEL_FAMILIES.includes(tier)) return;
+  await updateModelTier(userId, tier);
+  log.info("user.modelTier.changed", { targetUserId: userId, tier });
   revalidatePath("/admin");
 }
 

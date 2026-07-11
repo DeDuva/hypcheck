@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { addAllowedEmailAction, removeAllowedEmailAction, toggleModelAccessAction, updateUserRoleAction } from "@/lib/actions";
+import { addAllowedEmailAction, removeAllowedEmailAction, setModelTierAction, updateUserRoleAction } from "@/lib/actions";
 import { envAllowedEmails } from "@/lib/auth";
 import { requireAdmin } from "@/lib/authz";
 import { listAllowedEmails, listUsers } from "@/lib/store";
-import { BASE_MODEL_FAMILIES, GLOBAL_ROLE_LABELS, GRANTABLE_MODEL_FAMILIES, type GlobalRole } from "@/lib/types";
+import { GLOBAL_ROLE_LABELS, MODEL_FAMILIES, MODEL_FAMILY_LABELS, type GlobalRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -147,41 +147,38 @@ export default async function AdminPage({
                 </div>
 
                 {/* Line 2: model access — instant per-family toggles, no shared Update button */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-1 text-[11.5px] font-medium uppercase tracking-wide text-ink-faint">Models</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11.5px] font-medium uppercase tracking-wide text-ink-faint">Models</span>
                   {user.role === "admin" ? (
                     <span className="rounded-full bg-iris-soft px-2.5 py-0.5 text-[11.5px] font-medium text-iris">
                       All models (admin)
                     </span>
                   ) : (
                     <>
-                      {BASE_MODEL_FAMILIES.map((f) => (
-                        <span
-                          key={f}
-                          className="rounded-full bg-paper px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-ink-faint ring-1 ring-inset ring-edge"
-                        >
-                          {f} · always on
-                        </span>
-                      ))}
-                      {GRANTABLE_MODEL_FAMILIES.map((f) => {
-                        const enabled = user.modelAccess.includes(f);
-                        return (
-                          <form key={f} action={toggleModelAccessAction.bind(null, user.id, f)}>
-                            <button
-                              type="submit"
-                              aria-pressed={enabled}
-                              title={enabled ? `Click to disable ${f} for ${user.name}` : `Click to enable ${f} for ${user.name}`}
-                              className={
-                                enabled
-                                  ? "rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-emerald-700 ring-1 ring-inset ring-emerald-200 transition-colors hover:bg-emerald-100"
-                                  : "rounded-full bg-paper px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-ink-faint ring-1 ring-inset ring-edge transition-colors hover:bg-surface hover:text-ink-soft"
-                              }
-                            >
-                              {enabled ? `${f} ✓` : `${f} +`}
-                            </button>
-                          </form>
-                        );
-                      })}
+                      {/* Rating-scale control: Haiku (floor, always on) at the left, Fable at the
+                          right. Picking a tier grants it and every cheaper one to its left — this
+                          is a ladder, not independent toggles, so it renders as one joined bar. */}
+                      <div className="inline-flex overflow-hidden rounded-full ring-1 ring-inset ring-edge">
+                        {MODEL_FAMILIES.map((f) => {
+                          const included = MODEL_FAMILIES.indexOf(f) <= MODEL_FAMILIES.indexOf(user.modelTier);
+                          const isMax = f === user.modelTier;
+                          return (
+                            <form key={f} action={setModelTierAction.bind(null, user.id, f)}>
+                              <button
+                                type="submit"
+                                title={`Set ${user.name}'s model access up to ${MODEL_FAMILY_LABELS[f]}`}
+                                className={`border-r border-edge px-3 py-1 text-[11.5px] font-medium capitalize transition-colors last:border-r-0 ${
+                                  included
+                                    ? `bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ${isMax ? "ring-2 ring-inset ring-emerald-400" : ""}`
+                                    : "bg-paper text-ink-faint hover:bg-surface hover:text-ink-soft"
+                                }`}
+                              >
+                                {f}
+                              </button>
+                            </form>
+                          );
+                        })}
+                      </div>
                     </>
                   )}
                 </div>
