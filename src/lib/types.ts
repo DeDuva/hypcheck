@@ -88,12 +88,64 @@ export interface Hypcheck {
   status: "active" | "paused";
   cadence: Cadence;
   depth: Depth;
+  model: ModelFamily; // resolved to the newest model in the family at run time
   watchlist: WatchlistEntry[]; // companies, products, competitive signals — with reasons
   createdAt: string; // ISO
   nextRunAt: string | null; // ISO
   ownerId: string | null; // null on hypchecks created before phase 2 (grandfathered, shared access)
   refinement: RefinementNotes | null; // null when created without AI refinement (or pre-feature)
 }
+
+/**
+ * Model selection is by FAMILY, not pinned model ID — the engine resolves a
+ * family to the newest model in it at run time (see lib/models.ts), so new
+ * releases are picked up without a config change.
+ */
+export type ModelFamily = "haiku" | "sonnet" | "opus" | "fable";
+
+// Deliberately ordered cheapest/fastest → most capable — this order IS the
+// tier ladder. A user's access is "up through tier N", not an arbitrary set.
+export const MODEL_FAMILIES: ModelFamily[] = ["haiku", "sonnet", "opus", "fable"];
+
+/** Every creator can use Haiku without an admin grant; it's the access floor. */
+export const DEFAULT_MODEL_TIER: ModelFamily = "haiku";
+
+export const MODEL_FAMILY_LABELS: Record<ModelFamily, string> = {
+  haiku: "Haiku — fastest, most cost-effective",
+  sonnet: "Sonnet — balanced",
+  opus: "Opus — most capable Opus-tier",
+  fable: "Fable — most capable, premium",
+};
+
+/** Short display name for badges — capitalized family, no description. */
+export const MODEL_FAMILY_SHORT_LABELS: Record<ModelFamily, string> = {
+  haiku: "Haiku",
+  sonnet: "Sonnet",
+  opus: "Opus",
+  fable: "Fable",
+};
+
+/**
+ * Best-effort family inference for a resolved model ID (e.g. "claude-opus-4-8"
+ * → "opus"). Pure/dependency-free on purpose — lib/models.ts (which needs the
+ * Anthropic SDK for live resolution) re-exports this rather than defining its
+ * own copy, so client components can read a run's model family without
+ * pulling the SDK into the browser bundle.
+ */
+export function familyFromModelId(modelId: string): ModelFamily {
+  if (modelId.includes("haiku")) return "haiku";
+  if (modelId.includes("opus")) return "opus";
+  if (modelId.includes("fable") || modelId.includes("mythos")) return "fable";
+  return "sonnet";
+}
+
+/** All families at or below `tier`, in ladder order (e.g. "opus" → haiku, sonnet, opus). */
+export function familiesUpToTier(tier: ModelFamily): ModelFamily[] {
+  const cutoff = MODEL_FAMILIES.indexOf(tier);
+  return MODEL_FAMILIES.slice(0, cutoff + 1);
+}
+
+export const DEFAULT_MODEL_FAMILY: ModelFamily = "sonnet";
 
 export interface HypcheckAccessGrant {
   id: string;
@@ -187,6 +239,7 @@ export interface Run {
   industryAnalysis: IndustryAnalysis | null; // null on runs recorded before this feature
   changesSinceLastRun: string | null; // delta summary vs the previous run; null on first runs and pre-feature runs
   telemetry: RunTelemetry;
+  model: string | null; // exact resolved model ID used (live runs only); null for simulated and pre-feature runs
 }
 
 export type TraceKind = "research" | "refine";

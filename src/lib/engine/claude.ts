@@ -11,11 +11,12 @@ import type {
   RunResult,
   RunTelemetry,
 } from "../types";
-import { CADENCE_DAYS, DEPTH_LABELS, STANCE_LABELS } from "../types";
+import { CADENCE_DAYS, DEFAULT_MODEL_FAMILY, DEPTH_LABELS, STANCE_LABELS, type ModelFamily } from "../types";
 import { buildReportMd } from "./report";
 import { Logger, logger as rootLogger, serializeError } from "../logger";
 import { consumeTracedStream } from "./streamTrace";
 import { recordTrace, recordTraceError, type NewTrace } from "../store";
+import { FALLBACK_LATEST, familyFromModelId, familyShape, resolveModel } from "../models";
 
 /** Trace-write failures must never break a run — mirrors safeSetAttempt in engine/index.ts. */
 async function safeRecordTrace(
@@ -32,10 +33,24 @@ async function safeRecordTrace(
   }
 }
 
-// Sonnet is the default research model: ~2-3x faster than Opus at web-grounded
-// synthesis, which keeps a run (incl. the industry-analysis section) well under
-// Vercel's 300s function ceiling. Override with HYPCHECK_MODEL for max depth.
-const MODEL = process.env.HYPCHECK_MODEL || "claude-sonnet-4-6";
+// Each hypcheck carries a model FAMILY (haiku/sonnet/opus/fable), resolved to
+// the newest model in that family at call time via lib/models.ts. Sonnet is
+// the default. HYPCHECK_MODEL remains the ops escape hatch to pin an exact ID
+// globally (handled inside resolveModel).
+
+/**
+ * Request params that differ per model family. Sending an unsupported param
+ * is a 400 (e.g. `effort` on Haiku, the _20260209 web-search tool on Haiku),
+ * so shape rather than hardcode.
+ */
+function familyParams(family: ModelFamily, maxSearches: number) {
+  const shape = familyShape(family);
+  return {
+    tools: [{ type: shape.webSearchType, name: "web_search" as const, max_uses: maxSearches }] as Anthropic.MessageCreateParams["tools"],
+    thinking: shape.adaptiveThinking ? ({ type: "adaptive" } as const) : undefined,
+    effort: shape.effortSupported ? ("medium" as const) : undefined,
+  };
+}
 
 const DEPTH_SEARCHES: Record<Depth, number> = { brief: 3, standard: 5, deep: 8 };
 const DEPTH_TOKENS: Record<Depth, number> = { brief: 6000, standard: 12000, deep: 24000 };
@@ -49,9 +64,10 @@ export function liveEngineAvailable(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
-/** Non-secret engine config, for the health endpoint and logs. */
+/** Non-secret engine config, for the health endpoint and logs. Reports the
+ * default family's model — individual hypchecks may run a different family. */
 export function engineInfo(): { model: string; hasKey: boolean } {
-  return { model: MODEL, hasKey: liveEngineAvailable() };
+  return { model: process.env.HYPCHECK_MODEL || FALLBACK_LATEST[DEFAULT_MODEL_FAMILY], hasKey: liveEngineAvailable() };
 }
 
 export type LiveTelemetry = Pick<RunTelemetry, "inputTokens" | "outputTokens" | "searches">;
@@ -62,6 +78,8 @@ export interface LiveRunOutput {
   runAt: Date;
   /** The profiling trace for this call, for linking to the run row once it's recorded. */
   traceId: string | null;
+  /** The exact resolved model ID used for this call, for display on the run/report. */
+  model: string;
 }
 
 function webSearchRequests(usage: Anthropic.Usage): number | null {
@@ -322,20 +340,23 @@ export async function liveRun(
     .filter(Boolean)
     .join("\n");
 
+  const model = await resolveModel(hypcheck.model);
+  const params = familyParams(process.env.HYPCHECK_MODEL ? familyFromModelId(model) : hypcheck.model, DEPTH_SEARCHES[hypcheck.depth]);
+
   const researchStart = Date.now();
   // Single pass: research with web search AND emit the structured run result
   // directly (json_schema output), then render the human-facing markdown
   // locally via buildReportMd. This removes the separate extraction call.
   const stream = anthropic.messages.stream(
     {
-      model: MODEL,
+      model,
       max_tokens: DEPTH_TOKENS[hypcheck.depth],
-      thinking: { type: "adaptive" },
+      ...(params.thinking ? { thinking: params.thinking } : {}),
       output_config: {
-        effort: "medium",
+        ...(params.effort ? { effort: params.effort } : {}),
         format: { type: "json_schema", schema: RESULT_SCHEMA as unknown as Record<string, unknown> },
       },
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: DEPTH_SEARCHES[hypcheck.depth] }],
+      tools: params.tools,
       messages: [{ role: "user", content: researchPrompt }],
     },
     { signal: AbortSignal.timeout(RESEARCH_ABORT_MS) }
@@ -345,7 +366,7 @@ export async function liveRun(
   if (!traced.ok) {
     await safeRecordTrace(
       log,
-      { hypcheckId: hypcheck.id, kind: "research", model: MODEL, startedAt: new Date(researchStart), requestText: researchPrompt, durationMs: researchMs },
+      { hypcheckId: hypcheck.id, kind: "research", model, startedAt: new Date(researchStart), requestText: researchPrompt, durationMs: researchMs },
       traced.spans,
       JSON.stringify(serializeError(traced.error))
     );
@@ -358,7 +379,7 @@ export async function liveRun(
     {
       hypcheckId: hypcheck.id,
       kind: "research",
-      model: MODEL,
+      model,
       startedAt: new Date(researchStart),
       requestText: researchPrompt,
       durationMs: researchMs,
@@ -373,7 +394,7 @@ export async function liveRun(
   await onPhase?.("research_done", { researchMs, searches });
   log.info("engine.research.done", {
     ms: researchMs,
-    model: MODEL,
+    model,
     depth: hypcheck.depth,
     inputTokens: research.usage.input_tokens,
     outputTokens: research.usage.output_tokens,
@@ -521,6 +542,7 @@ export async function liveRun(
     },
     runAt: runDate,
     traceId,
+    model,
   };
 }
 
@@ -665,9 +687,12 @@ export async function liveRefine(
     .filter(Boolean)
     .join("\n");
 
+  // Refinement isn't tied to a hypcheck yet (it runs pre-creation), so it
+  // always uses the default family, resolved to that family's newest model.
+  const model = await resolveModel(DEFAULT_MODEL_FAMILY);
   const stream = anthropic.messages.stream(
     {
-      model: MODEL,
+      model,
       max_tokens: 8000,
       output_config: { format: { type: "json_schema", schema: REFINE_SCHEMA as unknown as Record<string, unknown> } },
       tools: [{ type: "web_search_20260209", name: "web_search", max_uses: REFINE_SEARCHES }],
@@ -680,7 +705,7 @@ export async function liveRefine(
   if (!traced.ok) {
     await safeRecordTrace(
       log,
-      { hypcheckId: null, kind: "refine", model: MODEL, startedAt: new Date(start), requestText: prompt, durationMs: ms },
+      { hypcheckId: null, kind: "refine", model, startedAt: new Date(start), requestText: prompt, durationMs: ms },
       traced.spans,
       JSON.stringify(serializeError(traced.error))
     );
@@ -692,7 +717,7 @@ export async function liveRefine(
     {
       hypcheckId: null,
       kind: "refine",
-      model: MODEL,
+      model,
       startedAt: new Date(start),
       requestText: prompt,
       durationMs: ms,
@@ -706,7 +731,7 @@ export async function liveRefine(
   );
   log.info("engine.refine.done", {
     ms,
-    model: MODEL,
+    model,
     round: answers.length ? 2 : 1,
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,

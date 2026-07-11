@@ -28,6 +28,7 @@ async function main() {
     status: "active",
     cadence: "weekly",
     depth: "brief", // brief = at most 3 searches, keeps the probe fast/cheap
+    model: "sonnet",
     watchlist: [
       { name: "Otter.ai", reason: "incumbent transcription leader most likely to add deliverable output" },
       { name: "Fathom", reason: "free notetaker absorbing the low end of the market" },

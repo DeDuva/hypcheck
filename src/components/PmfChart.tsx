@@ -24,6 +24,7 @@ export interface ChartPoint {
   execSummary: string;
   version: number;
   mode: "simulated" | "live";
+  model: string | null;
   versionChange: boolean;
   carriedForward: boolean; // no fresh signal this run — every metric carried its prior score
 }
@@ -160,7 +161,7 @@ export function PmfChart({ points, hypcheckId }: { points: ChartPoint[]; hypchec
               <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-soft ring-1 ring-inset ring-edge">
                 Hypothesis v{pinned.version}
               </span>
-              <ModeBadge mode={pinned.mode} />
+              <ModeBadge mode={pinned.mode} model={pinned.model} />
               {pinned.carriedForward && (
                 <span className="rounded-full bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-faint ring-1 ring-inset ring-edge">
                   Carried forward

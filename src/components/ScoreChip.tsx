@@ -1,5 +1,5 @@
 import type { AnalystStance, BandKey } from "@/lib/types";
-import { scoreBand, STANCE_LABELS } from "@/lib/types";
+import { familyFromModelId, MODEL_FAMILY_SHORT_LABELS, scoreBand, STANCE_LABELS } from "@/lib/types";
 
 export const BAND_COLORS: Record<BandKey, { text: string; bg: string; dot: string; stroke: string }> = {
   strong: { text: "text-emerald-700", bg: "bg-emerald-50", dot: "bg-emerald-500", stroke: "#059669" },
@@ -31,14 +31,22 @@ export function ScoreChip({ score, size = "md" }: { score: number; size?: "sm" |
   );
 }
 
-export function ModeBadge({ mode }: { mode: "simulated" | "live" }) {
-  return mode === "live" ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-iris-soft px-2 py-0.5 text-[11px] font-medium text-iris">
-      Live research
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 rounded-full bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-faint ring-1 ring-inset ring-edge">
-      Simulated
+/** Shows which model produced the run — the fact that matters more than "was it live". */
+export function ModeBadge({ mode, model }: { mode: "simulated" | "live"; model?: string | null }) {
+  if (mode !== "live") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-faint ring-1 ring-inset ring-edge">
+        Simulated
+      </span>
+    );
+  }
+  const label = model ? MODEL_FAMILY_SHORT_LABELS[familyFromModelId(model)] : "Live research";
+  return (
+    <span
+      title={model ?? undefined}
+      className="inline-flex items-center gap-1 rounded-full bg-iris-soft px-2 py-0.5 text-[11px] font-medium text-iris"
+    >
+      {label}
     </span>
   );
 }

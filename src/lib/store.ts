@@ -13,6 +13,7 @@ import type {
   InsightDirection,
   Metric,
   MetricScore,
+  ModelFamily,
   RefinementNotes,
   Run,
   RunResult,
@@ -26,7 +27,7 @@ import type {
   WatchlistChange,
   WatchlistEntry,
 } from "./types";
-import { CADENCE_DAYS } from "./types";
+import { CADENCE_DAYS, DEFAULT_MODEL_FAMILY, DEFAULT_MODEL_TIER, MODEL_FAMILIES } from "./types";
 
 type Row = Record<string, unknown>;
 
@@ -51,12 +52,18 @@ function rowToHypcheck(r: Row): Hypcheck {
     status: r.status as Hypcheck["status"],
     cadence: r.cadence as Cadence,
     depth: r.depth as Depth,
+    model: (r.model as ModelFamily) ?? DEFAULT_MODEL_FAMILY,
     watchlist: parseWatchlist(r.watchlist as string),
     createdAt: r.created_at as string,
     nextRunAt: (r.next_run_at as string) ?? null,
     ownerId: (r.owner_id as string) ?? null,
     refinement: r.refinement ? (JSON.parse(r.refinement as string) as RefinementNotes) : null,
   };
+}
+
+/** Parse a user's model_access column: the highest tier they've been granted. */
+function parseModelTier(raw: unknown): ModelFamily {
+  return typeof raw === "string" && MODEL_FAMILIES.includes(raw as ModelFamily) ? (raw as ModelFamily) : DEFAULT_MODEL_TIER;
 }
 
 function rowToGrant(r: Row): HypcheckAccessGrant {
@@ -136,6 +143,7 @@ function rowToRun(r: Row): Run {
       outputTokens: r.output_tokens == null ? null : Number(r.output_tokens),
       searches: r.searches == null ? null : Number(r.searches),
     },
+    model: (r.model as string) ?? null,
   };
 }
 
@@ -226,6 +234,8 @@ export interface CreateHypcheckInput {
   statement: string;
   cadence: Cadence;
   depth: Depth;
+  /** Model family for research runs. Callers pass the best family the creator is allowed. */
+  model?: ModelFamily;
   watchlist: WatchlistEntry[];
   metrics: Array<{ name: string; description: string; weight: number; signals?: string; direction?: string }>;
   refinement?: RefinementNotes | null;
@@ -236,13 +246,14 @@ export async function createHypcheck(input: CreateHypcheckInput, ownerId: string
   const id = newId();
   const now = new Date().toISOString();
   await db.execute({
-    sql: `INSERT INTO hypchecks (id, name, status, cadence, depth, watchlist, created_at, next_run_at, owner_id, refinement)
-          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO hypchecks (id, name, status, cadence, depth, model, watchlist, created_at, next_run_at, owner_id, refinement)
+          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       input.name,
       input.cadence,
       input.depth,
+      input.model ?? DEFAULT_MODEL_FAMILY,
       JSON.stringify(input.watchlist),
       now,
       now,
@@ -266,17 +277,25 @@ export async function createHypcheck(input: CreateHypcheckInput, ownerId: string
 
 export async function updateHypcheckSettings(
   id: string,
-  patch: { name?: string; cadence?: Cadence; depth?: Depth; watchlist?: WatchlistEntry[]; status?: "active" | "paused" }
+  patch: {
+    name?: string;
+    cadence?: Cadence;
+    depth?: Depth;
+    model?: ModelFamily;
+    watchlist?: WatchlistEntry[];
+    status?: "active" | "paused";
+  }
 ): Promise<void> {
   const db = await getDb();
   const current = await getHypcheck(id);
   if (!current) throw new Error("Hypcheck not found");
   await db.execute({
-    sql: `UPDATE hypchecks SET name = ?, cadence = ?, depth = ?, watchlist = ?, status = ? WHERE id = ?`,
+    sql: `UPDATE hypchecks SET name = ?, cadence = ?, depth = ?, model = ?, watchlist = ?, status = ? WHERE id = ?`,
     args: [
       patch.name ?? current.name,
       patch.cadence ?? current.cadence,
       patch.depth ?? current.depth,
+      patch.model ?? current.model,
       JSON.stringify(patch.watchlist ?? current.watchlist),
       patch.status ?? current.status,
       id,
@@ -388,12 +407,13 @@ export interface UserSummary {
   name: string;
   role: GlobalRole;
   createdAt: string;
+  modelTier: ModelFamily; // highest family this user is granted; access is every family up through it
 }
 
 /** Every account, for the global admin console. */
 export async function listUsers(): Promise<UserSummary[]> {
   const db = await getDb();
-  const res = await db.execute(`SELECT id, email, name, role, "createdAt" FROM "user" ORDER BY "createdAt" ASC`);
+  const res = await db.execute(`SELECT id, email, name, role, model_access, "createdAt" FROM "user" ORDER BY "createdAt" ASC`);
   return res.rows.map((r) => {
     const row = r as Row;
     return {
@@ -402,6 +422,7 @@ export async function listUsers(): Promise<UserSummary[]> {
       name: row.name as string,
       role: row.role as GlobalRole,
       createdAt: row.createdAt as string,
+      modelTier: parseModelTier(row.model_access),
     };
   });
 }
@@ -412,6 +433,22 @@ export async function updateUserRole(userId: string, role: GlobalRole): Promise<
   await db.execute({
     sql: `UPDATE "user" SET role = ?, "updatedAt" = ? WHERE id = ?`,
     args: [role, new Date().toISOString(), userId],
+  });
+}
+
+/** The highest model family this user is granted (admin-managed; Haiku needs no grant). */
+export async function getModelTier(userId: string): Promise<ModelFamily> {
+  const db = await getDb();
+  const res = await db.execute({ sql: `SELECT model_access FROM "user" WHERE id = ?`, args: [userId] });
+  return parseModelTier((res.rows[0] as Row | undefined)?.model_access);
+}
+
+/** Set a user's model access tier — grants that family and every cheaper one below it. */
+export async function updateModelTier(userId: string, tier: ModelFamily): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `UPDATE "user" SET model_access = ?, "updatedAt" = ? WHERE id = ?`,
+    args: [tier === DEFAULT_MODEL_TIER ? null : tier, new Date().toISOString(), userId],
   });
 }
 
@@ -616,7 +653,8 @@ export async function recordRun(
   mode: Run["mode"],
   result: RunResult,
   runAt: Date = new Date(),
-  telemetry: Partial<RunTelemetry> = {}
+  telemetry: Partial<RunTelemetry> = {},
+  model: string | null = null
 ): Promise<Run> {
   const db = await getDb();
   const runId = newId();
@@ -636,8 +674,8 @@ export async function recordRun(
     {
       sql: `INSERT INTO runs (id, hypcheck_id, hypothesis_version_id, hypothesis_version, run_at, mode,
               pmf_score, confidence, exec_summary, report_md, metric_scores,
-              duration_ms, input_tokens, output_tokens, searches, industry_analysis, changes_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              duration_ms, input_tokens, output_tokens, searches, industry_analysis, changes_summary, model)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         runId,
         hypcheckId,
@@ -656,6 +694,7 @@ export async function recordRun(
         telem.searches,
         result.industryAnalysis ? JSON.stringify(result.industryAnalysis) : null,
         result.changesSinceLastRun ?? null,
+        model,
       ],
     },
     ...result.insights.map((ins) => ({
@@ -691,6 +730,7 @@ export async function recordRun(
     industryAnalysis: result.industryAnalysis,
     changesSinceLastRun: result.changesSinceLastRun ?? null,
     telemetry: telem,
+    model,
   };
 }
 

@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { addAllowedEmailAction, removeAllowedEmailAction, updateUserRoleAction } from "@/lib/actions";
+import { addAllowedEmailAction, removeAllowedEmailAction, setModelTierAction, updateUserRoleAction } from "@/lib/actions";
 import { envAllowedEmails } from "@/lib/auth";
 import { requireAdmin } from "@/lib/authz";
 import { listAllowedEmails, listUsers } from "@/lib/store";
-import { GLOBAL_ROLE_LABELS, type GlobalRole } from "@/lib/types";
+import { GLOBAL_ROLE_LABELS, MODEL_FAMILIES, MODEL_FAMILY_LABELS, type GlobalRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -98,58 +98,100 @@ export default async function AdminPage({
             const isSelf = user.id === viewer.id;
             const envCovered = envEmails.has(user.email.toLowerCase());
             return (
-              <li key={user.id} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-[13px] font-medium text-ink">
-                    {user.name}
-                    {isSelf && <span className="ml-1.5 text-[11px] font-normal text-ink-faint">(you)</span>}
-                  </p>
-                  <p className="truncate text-[12px] text-ink-faint">{user.email}</p>
-                </div>
-                {isSelf ? (
-                  <span className="rounded-full bg-paper px-2.5 py-0.5 text-[11.5px] font-medium text-ink-soft ring-1 ring-inset ring-edge">
-                    {GLOBAL_ROLE_LABELS[user.role]}
-                  </span>
-                ) : (
-                  <div className="flex shrink-0 items-center gap-2">
-                    <form action={updateUserRoleAction.bind(null, user.id)} className="flex items-center gap-2">
-                      <select name="role" defaultValue={user.role} className={selectCls}>
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {GLOBAL_ROLE_LABELS[r]}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="submit"
-                        className="rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-ink/80"
-                      >
-                        Update
-                      </button>
-                    </form>
-                    {envCovered ? (
-                      <span
-                        title="Also allowed via the ALLOWED_EMAILS env var — removing access here wouldn't take effect until that's edited too"
-                        className="cursor-help rounded-md px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-faint ring-1 ring-inset ring-edge"
-                      >
-                        env
-                      </span>
-                    ) : (
-                      <form action={removeAllowedEmailAction.bind(null, user.email)}>
+              <li key={user.id} className="space-y-2 py-3">
+                {/* Line 1: identity + role/membership controls */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium text-ink">
+                      {user.name}
+                      {isSelf && <span className="ml-1.5 text-[11px] font-normal text-ink-faint">(you)</span>}
+                    </p>
+                    <p className="truncate text-[12px] text-ink-faint">
+                      {user.email}
+                      {envCovered && <span className="ml-1.5 text-[11px] text-amber-700">· also on env allowlist*</span>}
+                    </p>
+                  </div>
+                  {isSelf ? (
+                    <span className="rounded-full bg-paper px-2.5 py-0.5 text-[11.5px] font-medium text-ink-soft ring-1 ring-inset ring-edge">
+                      {GLOBAL_ROLE_LABELS[user.role]}
+                    </span>
+                  ) : (
+                    <div className="flex shrink-0 items-center gap-2">
+                      <form action={updateUserRoleAction.bind(null, user.id)} className="flex items-center gap-2">
+                        <select name="role" defaultValue={user.role} className={selectCls}>
+                          {ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {GLOBAL_ROLE_LABELS[r]}
+                            </option>
+                          ))}
+                        </select>
                         <button
                           type="submit"
-                          className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-rose-600/80 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                          className="rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-ink/80"
                         >
-                          Remove access
+                          Update
                         </button>
                       </form>
-                    )}
-                  </div>
-                )}
+                      {!envCovered && (
+                        <form action={removeAllowedEmailAction.bind(null, user.email)}>
+                          <button
+                            type="submit"
+                            className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-rose-600/80 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                          >
+                            Remove access
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Line 2: model access — instant per-family toggles, no shared Update button */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11.5px] font-medium uppercase tracking-wide text-ink-faint">Models</span>
+                  {user.role === "admin" ? (
+                    <span className="rounded-full bg-iris-soft px-2.5 py-0.5 text-[11.5px] font-medium text-iris">
+                      All models (admin)
+                    </span>
+                  ) : (
+                    <>
+                      {/* Rating-scale control: Haiku (floor, always on) at the left, Fable at the
+                          right. Picking a tier grants it and every cheaper one to its left — this
+                          is a ladder, not independent toggles, so it renders as one joined bar. */}
+                      <div className="inline-flex overflow-hidden rounded-full ring-1 ring-inset ring-edge">
+                        {MODEL_FAMILIES.map((f) => {
+                          const included = MODEL_FAMILIES.indexOf(f) <= MODEL_FAMILIES.indexOf(user.modelTier);
+                          const isMax = f === user.modelTier;
+                          return (
+                            <form key={f} action={setModelTierAction.bind(null, user.id, f)}>
+                              <button
+                                type="submit"
+                                title={`Set ${user.name}'s model access up to ${MODEL_FAMILY_LABELS[f]}`}
+                                className={`border-r border-edge px-3 py-1 text-[11.5px] font-medium capitalize transition-colors last:border-r-0 ${
+                                  included
+                                    ? `bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ${isMax ? "ring-2 ring-inset ring-emerald-400" : ""}`
+                                    : "bg-paper text-ink-faint hover:bg-surface hover:text-ink-soft"
+                                }`}
+                              >
+                                {f}
+                              </button>
+                            </form>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
               </li>
             );
           })}
         </ul>
+        {users.some((u) => envEmails.has(u.email.toLowerCase())) && (
+          <p className="mt-3 border-t border-edge pt-3 text-[11.5px] text-ink-faint">
+            *Also on env allowlist: this email is additionally allowed via the <code className="font-mono">ALLOWED_EMAILS</code>{" "}
+            environment variable in Vercel. Removing access here won&apos;t lock them out until that variable is edited too.
+          </p>
+        )}
       </div>
 
       {pending.length > 0 && (
