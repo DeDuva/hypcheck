@@ -143,6 +143,7 @@ function rowToRun(r: Row): Run {
       outputTokens: r.output_tokens == null ? null : Number(r.output_tokens),
       searches: r.searches == null ? null : Number(r.searches),
     },
+    model: (r.model as string) ?? null,
   };
 }
 
@@ -652,7 +653,8 @@ export async function recordRun(
   mode: Run["mode"],
   result: RunResult,
   runAt: Date = new Date(),
-  telemetry: Partial<RunTelemetry> = {}
+  telemetry: Partial<RunTelemetry> = {},
+  model: string | null = null
 ): Promise<Run> {
   const db = await getDb();
   const runId = newId();
@@ -672,8 +674,8 @@ export async function recordRun(
     {
       sql: `INSERT INTO runs (id, hypcheck_id, hypothesis_version_id, hypothesis_version, run_at, mode,
               pmf_score, confidence, exec_summary, report_md, metric_scores,
-              duration_ms, input_tokens, output_tokens, searches, industry_analysis, changes_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              duration_ms, input_tokens, output_tokens, searches, industry_analysis, changes_summary, model)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         runId,
         hypcheckId,
@@ -692,6 +694,7 @@ export async function recordRun(
         telem.searches,
         result.industryAnalysis ? JSON.stringify(result.industryAnalysis) : null,
         result.changesSinceLastRun ?? null,
+        model,
       ],
     },
     ...result.insights.map((ins) => ({
@@ -727,6 +730,7 @@ export async function recordRun(
     industryAnalysis: result.industryAnalysis,
     changesSinceLastRun: result.changesSinceLastRun ?? null,
     telemetry: telem,
+    model,
   };
 }
 

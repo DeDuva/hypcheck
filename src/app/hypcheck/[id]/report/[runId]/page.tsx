@@ -48,7 +48,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <ModeBadge mode={run.mode} />
+          <ModeBadge mode={run.mode} model={run.model} />
           <div className="flex items-center gap-1">
             {prior && (
               <Link

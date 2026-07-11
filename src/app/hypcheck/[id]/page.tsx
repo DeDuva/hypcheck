@@ -40,6 +40,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
     execSummary: r.execSummary,
     version: r.hypothesisVersion,
     mode: r.mode,
+    model: r.model,
     versionChange: i > 0 && r.hypothesisVersion !== runs[i - 1].hypothesisVersion,
     carriedForward: r.metricScores.length > 0 && r.metricScores.every((ms) => ms.carriedForward),
   }));
@@ -188,7 +189,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
                 </div>
                 <div className="mt-2.5 flex items-center gap-2">
                   <ScoreChip score={latest.pmfScore} />
-                  <ModeBadge mode={latest.mode} />
+                  <ModeBadge mode={latest.mode} model={latest.model} />
                 </div>
                 <p className="mt-3 text-[12px] text-ink-faint">
                   Last run {formatDate(latest.runAt)} · confidence {Math.round(latest.confidence * 100)}%
@@ -307,7 +308,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
                       </td>
                       <td className="px-2 py-2.5 text-ink-faint">v{run.hypothesisVersion}</td>
                       <td className="px-2 py-2.5">
-                        <ModeBadge mode={run.mode} />
+                        <ModeBadge mode={run.mode} model={run.model} />
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <Link

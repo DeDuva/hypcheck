@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { ModelFamily } from "./types";
 import { logger, serializeError } from "./logger";
 
+export { familyFromModelId } from "./types";
+
 /**
  * Known-latest model per family — the fallback when the Models API can't be
  * reached (and the instant answer before the first successful refresh).
@@ -40,14 +42,6 @@ const FAMILY_SHAPE: Record<ModelFamily, FamilyRequestShape> = {
 
 export function familyShape(family: ModelFamily): FamilyRequestShape {
   return FAMILY_SHAPE[family];
-}
-
-/** Best-effort family inference for arbitrary model IDs (HYPCHECK_MODEL override). */
-export function familyFromModelId(modelId: string): ModelFamily {
-  if (modelId.includes("haiku")) return "haiku";
-  if (modelId.includes("opus")) return "opus";
-  if (modelId.includes("fable") || modelId.includes("mythos")) return "fable";
-  return "sonnet";
 }
 
 // Refresh the model list at most every 6 hours per process; serverless

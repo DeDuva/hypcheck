@@ -198,6 +198,7 @@ const MIGRATIONS: Record<string, Record<string, string>> = {
     searches: "INTEGER",
     industry_analysis: "TEXT",
     changes_summary: "TEXT",
+    model: "TEXT", // exact resolved model ID (live runs only); null for simulated/pre-feature runs
   },
   hypchecks: {
     owner_id: "TEXT",
