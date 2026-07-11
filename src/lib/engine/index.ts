@@ -1,5 +1,5 @@
 import type { Hypcheck, PriorRunDigest, RefineAnswer, RefineResult, Run } from "../types";
-import { currentVersion, latestRun, listInsights, listMetrics, recordRun, setLastRunAttempt, setNextRun, type RunAttempt } from "../store";
+import { currentVersion, latestRun, linkTraceToRun, listInsights, listMetrics, recordRun, setLastRunAttempt, setNextRun, type RunAttempt } from "../store";
 import { engineInfo, liveEngineAvailable, liveRefine, liveRun } from "./claude";
 import { simulateRun } from "./simulate";
 import { Logger, logger, newRequestId, serializeError } from "../logger";
@@ -79,13 +79,20 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
               phase,
               researchMs: typeof extra.researchMs === "number" ? extra.researchMs : undefined,
             });
-          const { result, telemetry, runAt } = await liveRun(hypcheck, version, metrics, priorDigest, log, onPhase);
+          const { result, telemetry, runAt, traceId } = await liveRun(hypcheck, version, metrics, priorDigest, log, onPhase);
           // Persist the same instant the report was rendered against, so the
           // report body's date can never drift from the run's `runAt`.
           run = await recordRun(hypcheck.id, version, "live", result, runAt, {
             durationMs: Date.now() - start,
             ...telemetry,
           });
+          if (traceId) {
+            try {
+              await linkTraceToRun(traceId, run.id);
+            } catch (err) {
+              log.warn("trace.link_failed", { err: serializeError(err) });
+            }
+          }
         } catch (err) {
           // Fall back to the simulated engine so a transient API failure doesn't
           // leave a scheduled run silently missing from the timeline.

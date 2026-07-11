@@ -17,6 +17,11 @@ import type {
   Run,
   RunResult,
   RunTelemetry,
+  SpanInput,
+  Trace,
+  TraceKind,
+  TraceSpan,
+  TraceSpanKind,
   VersionSource,
   WatchlistChange,
   WatchlistEntry,
@@ -148,6 +153,39 @@ function rowToInsight(r: Row): Insight {
       : null,
     status: r.status as Insight["status"],
     createdAt: r.created_at as string,
+  };
+}
+
+function rowToTrace(r: Row): Trace {
+  return {
+    id: r.id as string,
+    hypcheckId: (r.hypcheck_id as string) ?? null,
+    runId: (r.run_id as string) ?? null,
+    kind: r.kind as TraceKind,
+    status: r.status as Trace["status"],
+    model: r.model as string,
+    startedAt: r.started_at as string,
+    durationMs: r.duration_ms == null ? null : Number(r.duration_ms),
+    inputTokens: r.input_tokens == null ? null : Number(r.input_tokens),
+    outputTokens: r.output_tokens == null ? null : Number(r.output_tokens),
+    searches: r.searches == null ? null : Number(r.searches),
+    stopReason: (r.stop_reason as string) ?? null,
+    error: (r.error as string) ?? null,
+    requestText: r.request_text as string,
+  };
+}
+
+function rowToTraceSpan(r: Row): TraceSpan {
+  return {
+    id: r.id as string,
+    traceId: r.trace_id as string,
+    seq: Number(r.seq),
+    kind: r.kind as TraceSpanKind,
+    label: r.label as string,
+    startMs: Number(r.start_ms),
+    durationMs: Number(r.duration_ms),
+    inputText: (r.input_text as string) ?? null,
+    outputText: (r.output_text as string) ?? null,
   };
 }
 
@@ -654,6 +692,109 @@ export async function recordRun(
     changesSinceLastRun: result.changesSinceLastRun ?? null,
     telemetry: telem,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Traces (API-call profiling)
+// ---------------------------------------------------------------------------
+
+export interface NewTrace {
+  hypcheckId: string | null;
+  kind: TraceKind;
+  model: string;
+  startedAt: Date;
+  requestText: string;
+  durationMs: number;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  searches?: number | null;
+  stopReason?: string | null;
+}
+
+function traceInsertStatements(id: string, status: Trace["status"], trace: NewTrace, spans: SpanInput[], error: string | null) {
+  return [
+    {
+      sql: `INSERT INTO traces (id, hypcheck_id, run_id, kind, status, model, started_at, duration_ms, input_tokens, output_tokens, searches, stop_reason, error, request_text)
+            VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        id,
+        trace.hypcheckId,
+        trace.kind,
+        status,
+        trace.model,
+        trace.startedAt.toISOString(),
+        trace.durationMs,
+        trace.inputTokens ?? null,
+        trace.outputTokens ?? null,
+        trace.searches ?? null,
+        trace.stopReason ?? null,
+        error,
+        trace.requestText,
+      ],
+    },
+    ...spans.map((s, i) => ({
+      sql: `INSERT INTO trace_spans (id, trace_id, seq, kind, label, start_ms, duration_ms, input_text, output_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [newId(), id, i, s.kind, s.label, s.startMs, s.durationMs, s.inputText, s.outputText],
+    })),
+  ];
+}
+
+/** Persist a completed trace + its spans in one batched write. Returns the new trace id. */
+export async function recordTrace(trace: NewTrace, spans: SpanInput[]): Promise<string> {
+  const db = await getDb();
+  const id = newId();
+  await db.batch(traceInsertStatements(id, "ok", trace, spans, null), "write");
+  return id;
+}
+
+/** Same as recordTrace, but marks the trace as failed with the given error message. */
+export async function recordTraceError(trace: NewTrace, spans: SpanInput[], error: string): Promise<string> {
+  const db = await getDb();
+  const id = newId();
+  await db.batch(traceInsertStatements(id, "error", trace, spans, error), "write");
+  return id;
+}
+
+/** Backfill run_id once the run row exists — liveRun finishes before recordRun runs. */
+export async function linkTraceToRun(traceId: string, runId: string): Promise<void> {
+  const db = await getDb();
+  await db.execute({ sql: `UPDATE traces SET run_id = ? WHERE id = ?`, args: [runId, traceId] });
+}
+
+export async function listTraces(opts: { hypcheckId?: string; limit?: number } = {}): Promise<Trace[]> {
+  const db = await getDb();
+  const limit = opts.limit ?? 100;
+  const res = opts.hypcheckId
+    ? await db.execute({
+        sql: `SELECT * FROM traces WHERE hypcheck_id = ? ORDER BY started_at DESC LIMIT ?`,
+        args: [opts.hypcheckId, limit],
+      })
+    : await db.execute({ sql: `SELECT * FROM traces ORDER BY started_at DESC LIMIT ?`, args: [limit] });
+  return res.rows.map((r) => rowToTrace(r as Row));
+}
+
+export async function getTraceDetail(id: string): Promise<{ trace: Trace; spans: TraceSpan[] } | null> {
+  const db = await getDb();
+  const [traceRes, spanRes] = await Promise.all([
+    db.execute({ sql: `SELECT * FROM traces WHERE id = ?`, args: [id] }),
+    db.execute({ sql: `SELECT * FROM trace_spans WHERE trace_id = ? ORDER BY seq ASC`, args: [id] }),
+  ]);
+  if (!traceRes.rows[0]) return null;
+  return {
+    trace: rowToTrace(traceRes.rows[0] as Row),
+    spans: spanRes.rows.map((r) => rowToTraceSpan(r as Row)),
+  };
+}
+
+/** hypcheck id + name for traces list rendering — small lookup table, not worth a JOIN per row. */
+export async function hypcheckNamesById(ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+  const db = await getDb();
+  const placeholders = unique.map(() => "?").join(",");
+  const res = await db.execute({ sql: `SELECT id, name FROM hypchecks WHERE id IN (${placeholders})`, args: unique });
+  return new Map(res.rows.map((r) => [(r as Row).id as string, (r as Row).name as string]));
 }
 
 // ---------------------------------------------------------------------------
