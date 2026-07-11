@@ -81,13 +81,21 @@ export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger)
               phase,
               researchMs: typeof extra.researchMs === "number" ? extra.researchMs : undefined,
             });
-          const { result, telemetry, runAt, traceId } = await liveRun(hypcheck, version, metrics, priorDigest, log, onPhase);
+          const { result, telemetry, runAt, traceId, model: resolvedModel } = await liveRun(hypcheck, version, metrics, priorDigest, log, onPhase);
           // Persist the same instant the report was rendered against, so the
           // report body's date can never drift from the run's `runAt`.
-          run = await recordRun(hypcheck.id, version, "live", result, runAt, {
-            durationMs: Date.now() - start,
-            ...telemetry,
-          });
+          run = await recordRun(
+            hypcheck.id,
+            version,
+            "live",
+            result,
+            runAt,
+            {
+              durationMs: Date.now() - start,
+              ...telemetry,
+            },
+            resolvedModel
+          );
           if (traceId) {
             try {
               await linkTraceToRun(traceId, run.id);

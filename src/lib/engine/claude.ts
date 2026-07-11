@@ -78,6 +78,8 @@ export interface LiveRunOutput {
   runAt: Date;
   /** The profiling trace for this call, for linking to the run row once it's recorded. */
   traceId: string | null;
+  /** The exact resolved model ID used for this call, for display on the run/report. */
+  model: string;
 }
 
 function webSearchRequests(usage: Anthropic.Usage): number | null {
@@ -540,6 +542,7 @@ export async function liveRun(
     },
     runAt: runDate,
     traceId,
+    model,
   };
 }
 

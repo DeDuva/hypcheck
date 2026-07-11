@@ -117,6 +117,28 @@ export const MODEL_FAMILY_LABELS: Record<ModelFamily, string> = {
   fable: "Fable — most capable, premium",
 };
 
+/** Short display name for badges — capitalized family, no description. */
+export const MODEL_FAMILY_SHORT_LABELS: Record<ModelFamily, string> = {
+  haiku: "Haiku",
+  sonnet: "Sonnet",
+  opus: "Opus",
+  fable: "Fable",
+};
+
+/**
+ * Best-effort family inference for a resolved model ID (e.g. "claude-opus-4-8"
+ * → "opus"). Pure/dependency-free on purpose — lib/models.ts (which needs the
+ * Anthropic SDK for live resolution) re-exports this rather than defining its
+ * own copy, so client components can read a run's model family without
+ * pulling the SDK into the browser bundle.
+ */
+export function familyFromModelId(modelId: string): ModelFamily {
+  if (modelId.includes("haiku")) return "haiku";
+  if (modelId.includes("opus")) return "opus";
+  if (modelId.includes("fable") || modelId.includes("mythos")) return "fable";
+  return "sonnet";
+}
+
 /** All families at or below `tier`, in ladder order (e.g. "opus" → haiku, sonnet, opus). */
 export function familiesUpToTier(tier: ModelFamily): ModelFamily[] {
   const cutoff = MODEL_FAMILIES.indexOf(tier);
@@ -217,6 +239,7 @@ export interface Run {
   industryAnalysis: IndustryAnalysis | null; // null on runs recorded before this feature
   changesSinceLastRun: string | null; // delta summary vs the previous run; null on first runs and pre-feature runs
   telemetry: RunTelemetry;
+  model: string | null; // exact resolved model ID used (live runs only); null for simulated and pre-feature runs
 }
 
 export type TraceKind = "research" | "refine";
