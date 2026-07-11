@@ -82,6 +82,12 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
         {canEdit && (
           <div className="flex items-center gap-2">
             <Link
+              href={`/hypcheck/${id}/traces`}
+              className="rounded-lg bg-surface px-3.5 py-2 text-[13px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper"
+            >
+              Profile
+            </Link>
+            <Link
               href={`/hypcheck/${id}/settings`}
               className="rounded-lg bg-surface px-3.5 py-2 text-[13px] font-medium text-ink-soft ring-1 ring-inset ring-edge transition-colors hover:bg-paper"
             >
