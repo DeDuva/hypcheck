@@ -21,12 +21,14 @@ import {
   setInsightStatus,
   setLastRunAttempt,
   updateHypcheckSettings,
+  updateModelAccess,
   updateUserRole,
   type CreateHypcheckInput,
 } from "./store";
-import { engineInfo } from "./engine";
-import { requireAdmin, requireCanCreateHypcheck, requireHypcheckAccess, requireUser } from "./authz";
-import type { Cadence, Depth, GlobalRole, GrantRole, RefineAnswer, RefineResult, WatchlistEntry } from "./types";
+import { FALLBACK_LATEST } from "./models";
+import { allowedModelFamilies, requireAdmin, requireCanCreateHypcheck, requireHypcheckAccess, requireUser } from "./authz";
+import type { Cadence, Depth, GlobalRole, GrantRole, ModelFamily, RefineAnswer, RefineResult, WatchlistEntry } from "./types";
+import { GRANTABLE_MODEL_FAMILIES, MODEL_FAMILIES } from "./types";
 import { logger, newRequestId, serializeError } from "./logger";
 
 /** Every server action runs inside a correlated span so it's traceable in logs. */
@@ -73,7 +75,7 @@ export async function runNowAction(hypcheckId: string): Promise<void> {
     status: "running",
     hypcheckId,
     hypcheckName: hypcheck.name,
-    model: engineInfo().model,
+    model: process.env.HYPCHECK_MODEL || FALLBACK_LATEST[hypcheck.model],
     startedAt: new Date().toISOString(),
   });
   log.info("runNow.scheduled", { hypcheckName: hypcheck.name });
@@ -140,7 +142,7 @@ export async function reviseHypothesisAction(hypcheckId: string, formData: FormD
 }
 
 export async function updateSettingsAction(hypcheckId: string, formData: FormData): Promise<void> {
-  const { viewer } = await requireHypcheckAccess(hypcheckId, "editor");
+  const { viewer, hypcheck } = await requireHypcheckAccess(hypcheckId, "editor");
   const log = actionLogger("updateSettings", { userId: viewer.id, hypcheckId });
   await log.span("action.updateSettings", async () => {
     // The watchlist editor serializes its full name+reason+category state into
@@ -160,10 +162,25 @@ export async function updateSettingsAction(hypcheckId: string, formData: FormDat
         seen.add(e.name.toLowerCase());
         return true;
       });
+    // Model changes are permission-gated server-side: the chosen family must
+    // be one the editor is allowed to use, or the hypcheck's current value
+    // (so saving unrelated settings never fails on a model someone else set).
+    const requestedModel = formData.get("model") as ModelFamily | null;
+    let model: ModelFamily | undefined;
+    if (requestedModel && MODEL_FAMILIES.includes(requestedModel) && requestedModel !== hypcheck.model) {
+      const allowed = await allowedModelFamilies(viewer);
+      if (!allowed.includes(requestedModel)) {
+        log.warn("settings.model.denied", { requestedModel });
+        throw new Error(`You don't have access to the ${requestedModel} model — ask an admin to enable it`);
+      }
+      model = requestedModel;
+    }
+
     await updateHypcheckSettings(hypcheckId, {
       name: String(formData.get("name") ?? "").trim() || undefined,
       cadence: (formData.get("cadence") as Cadence) || undefined,
       depth: (formData.get("depth") as Depth) || undefined,
+      model,
       status: (formData.get("status") as "active" | "paused") || undefined,
       watchlist,
     });
@@ -266,10 +283,12 @@ export async function revokeInvitationAction(hypcheckId: string, email: string):
 }
 
 /**
- * Change a user's global role — the only way to promote someone to
- * creator/admin now that signups no longer bootstrap as admin. Admin-only,
- * and an admin can't demote themselves — that's how you'd end up with zero
- * admins able to undo it.
+ * Change a user's global role and model access — the only way to promote
+ * someone to creator/admin now that signups no longer bootstrap as admin.
+ * Admin-only, and an admin can't demote themselves — that's how you'd end up
+ * with zero admins able to undo it. Model access rides in the same form:
+ * every creator gets the base families (haiku, sonnet); the checkboxes grant
+ * the premium ones (opus, fable) per user.
  */
 export async function updateUserRoleAction(userId: string, formData: FormData): Promise<void> {
   const viewer = await requireAdmin();
@@ -279,8 +298,10 @@ export async function updateUserRoleAction(userId: string, formData: FormData): 
   if (userId === viewer.id) {
     redirect(`/admin?roleError=${encodeURIComponent("You can't change your own role")}`);
   }
+  const extras = GRANTABLE_MODEL_FAMILIES.filter((f) => formData.get(`model_${f}`) === "on");
   await updateUserRole(userId, role);
-  log.info("user.role.changed", { targetUserId: userId, role });
+  await updateModelAccess(userId, extras);
+  log.info("user.role.changed", { targetUserId: userId, role, modelAccess: extras });
   revalidatePath("/admin");
   // Same fix as updateAccessRoleAction: the role <select> is uncontrolled
   // (defaultValue), so an in-place RSC patch never updates its displayed

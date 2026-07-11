@@ -3,6 +3,7 @@ import { currentVersion, latestRun, linkTraceToRun, listInsights, listMetrics, r
 import { engineInfo, liveEngineAvailable, liveRefine, liveRun } from "./claude";
 import { simulateRun } from "./simulate";
 import { Logger, logger, newRequestId, serializeError } from "../logger";
+import { FALLBACK_LATEST } from "../models";
 
 /** Persist the run-attempt marker; never let diagnostics break a run. */
 async function safeSetAttempt(log: Logger, a: RunAttempt): Promise<void> {
@@ -16,7 +17,8 @@ async function safeSetAttempt(log: Logger, a: RunAttempt): Promise<void> {
 /** Execute a research run for a hypcheck and persist the result. */
 export async function executeRun(hypcheck: Hypcheck, parentLog: Logger = logger): Promise<Run> {
   const log = parentLog.child({ runId: newRequestId(), hypcheckId: hypcheck.id });
-  const model = engineInfo().model;
+  // Display-only marker value; the run's trace records the exact resolved model ID.
+  const model = process.env.HYPCHECK_MODEL || FALLBACK_LATEST[hypcheck.model];
   const startedAt = new Date().toISOString();
   // Commit a "running" marker before the long work so a hard timeout (function
   // killed mid-run) is still visible on /api/health as a stuck "running" attempt.
