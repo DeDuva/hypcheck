@@ -6,7 +6,11 @@ export function formatDateShort(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/** Date + time — disambiguates multiple runs on the same day without extra chrome. */
+/**
+ * Date + time — disambiguates multiple runs on the same day without extra chrome.
+ * Pinned to Pacific time rather than the server's ambient timezone (UTC on
+ * Vercel), so it renders the same everywhere instead of drifting per environment.
+ */
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
     month: "short",
@@ -14,6 +18,8 @@ export function formatDateTime(iso: string): string {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Los_Angeles",
+    timeZoneName: "short",
   });
 }
 
