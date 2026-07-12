@@ -4,10 +4,15 @@ import type { Insight, InsightDirection } from "@/lib/types";
 import { formatDateShort } from "@/lib/format";
 import { DiffView } from "./DiffView";
 
+// Supporting/challenging read on the same axis as the score bands (does the
+// evidence help or hurt the case), so they borrow band-strong/band-weak
+// rather than invent a third palette. "Watch" isn't a verdict at all — it's
+// "hold and keep monitoring", which is exactly what stance-hold already
+// means elsewhere in the app (see the dashboard's pending-proposal badge).
 const DIRECTION_META: Record<InsightDirection, { label: string; classes: string }> = {
-  supporting: { label: "Supporting", classes: "bg-emerald-50 text-emerald-700" },
-  challenging: { label: "Challenging", classes: "bg-rose-50 text-rose-700" },
-  watch: { label: "Watch", classes: "bg-sky-50 text-sky-700" },
+  supporting: { label: "Supporting", classes: "bg-band-strong-tint text-band-strong" },
+  challenging: { label: "Challenging", classes: "bg-band-weak-tint text-band-weak" },
+  watch: { label: "Watch", classes: "bg-stance-hold-tint text-stance-hold" },
 };
 
 export function InsightCard({
@@ -27,7 +32,7 @@ export function InsightCard({
   return (
     <div
       className={`rounded-xl border p-4 ${
-        isPendingProposal ? "border-amber-200 bg-amber-50/40" : "border-edge bg-surface"
+        isPendingProposal ? "border-stance-hold/30 bg-stance-hold-tint/50" : "border-edge bg-surface"
       }`}
     >
       <div className="flex items-center justify-between gap-3">

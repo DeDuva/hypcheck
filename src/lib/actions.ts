@@ -30,6 +30,8 @@ import { allowedModelFamilies, requireAdmin, requireCanCreateHypcheck, requireHy
 import type { Cadence, Depth, GlobalRole, GrantRole, ModelFamily, RefineAnswer, RefineResult, WatchlistEntry } from "./types";
 import { MODEL_FAMILIES } from "./types";
 import { logger, newRequestId, serializeError } from "./logger";
+import { cookies } from "next/headers";
+import { THEME_COOKIE, type Theme } from "./theme";
 
 /** Every server action runs inside a correlated span so it's traceable in logs. */
 function actionLogger(action: string, ctx: Record<string, unknown> = {}) {
@@ -361,4 +363,16 @@ export async function removeAllowedEmailAction(email: string): Promise<void> {
   await removeAllowedEmail(normalized);
   log.info("admin.allowedEmail.removed", { email: normalized });
   revalidatePath("/admin");
+}
+
+/**
+ * Persists the light/dark choice so the next server render picks it up with
+ * no flash. Deliberately unauthenticated (theme applies on /signin and
+ * /about too) and doesn't revalidate anything — ThemeToggle flips the
+ * `<html>` class itself for the current page; this just makes the next
+ * full page load agree with it.
+ */
+export async function setThemeAction(theme: Theme): Promise<void> {
+  const store = await cookies();
+  store.set(THEME_COOKIE, theme, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
 }

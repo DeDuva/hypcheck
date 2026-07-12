@@ -49,7 +49,7 @@ export default async function AdminPage({
         <code className="font-mono">member</code>). Admins implicitly get access to every hypcheck.
       </p>
 
-      {roleError && <p className="mt-2.5 text-[12px] text-rose-600">{roleError}</p>}
+      {roleError && <p className="mt-2.5 text-[12px] text-band-weak">{roleError}</p>}
 
       <div className="mt-6 rounded-2xl border border-edge bg-surface p-6 shadow-card">
         <h2 className="text-[13.5px] font-semibold text-ink">Add a user</h2>
@@ -108,7 +108,7 @@ export default async function AdminPage({
                     </p>
                     <p className="truncate text-[12px] text-ink-faint">
                       {user.email}
-                      {envCovered && <span className="ml-1.5 text-[11px] text-amber-700">· also on env allowlist*</span>}
+                      {envCovered && <span className="ml-1.5 text-[11px] text-stance-hold">· also on env allowlist*</span>}
                     </p>
                   </div>
                   {isSelf ? (
@@ -136,7 +136,7 @@ export default async function AdminPage({
                         <form action={removeAllowedEmailAction.bind(null, user.email)}>
                           <button
                             type="submit"
-                            className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-rose-600/80 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                            className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-band-weak/80 transition-colors hover:bg-band-weak-tint hover:text-band-weak"
                           >
                             Remove access
                           </button>
@@ -169,7 +169,7 @@ export default async function AdminPage({
                                 title={`Set ${user.name}'s model access up to ${MODEL_FAMILY_LABELS[f]}`}
                                 className={`border-r border-edge px-3 py-1 text-[11.5px] font-medium capitalize transition-colors last:border-r-0 ${
                                   included
-                                    ? `bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ${isMax ? "ring-2 ring-inset ring-emerald-400" : ""}`
+                                    ? `bg-band-strong-tint text-band-strong hover:bg-band-strong-tint/70 ${isMax ? "ring-2 ring-inset ring-band-strong/50" : ""}`
                                     : "bg-paper text-ink-faint hover:bg-surface hover:text-ink-soft"
                                 }`}
                               >
@@ -205,13 +205,13 @@ export default async function AdminPage({
               <li key={a.id} className="flex items-center justify-between gap-3 py-2.5">
                 <p className="truncate text-[13px] text-ink">{a.email}</p>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-amber-700 ring-1 ring-inset ring-amber-200">
+                  <span className="rounded-full bg-stance-hold-tint px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-stance-hold ring-1 ring-inset ring-stance-hold/25">
                     {GLOBAL_ROLE_LABELS[a.role]}
                   </span>
                   <form action={removeAllowedEmailAction.bind(null, a.email)}>
                     <button
                       type="submit"
-                      className="rounded-md px-2.5 py-1 text-[12px] font-medium text-rose-600/80 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                      className="rounded-md px-2.5 py-1 text-[12px] font-medium text-band-weak/80 transition-colors hover:bg-band-weak-tint hover:text-band-weak"
                     >
                       Revoke
                     </button>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { ensureSeeded } from "@/lib/seed";
@@ -9,9 +9,14 @@ import { BandDot } from "@/components/ScoreChip";
 import { UserMenu } from "@/components/UserMenu";
 import { getViewer } from "@/lib/authz";
 import { devOpenMode } from "@/lib/auth";
+import { getTheme } from "@/lib/theme";
+import { MobileNav } from "@/components/MobileNav";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// The "claim" face — hypothesis statements and headline moments, set against
+// the sans/mono pair above for UI chrome and data. Variable weight + italic.
+const newsreader = Newsreader({ variable: "--font-newsreader", subsets: ["latin"], style: ["normal", "italic"] });
 
 export const metadata: Metadata = {
   title: "Hypcheck — track product-market fit over time",
@@ -19,15 +24,26 @@ export const metadata: Metadata = {
     "Establish a product hypothesis, track PMF signal over time with scheduled research runs, and fold insights back into the hypothesis.",
 };
 
+// Runs before hydration, once, only to cover the sliver of first-ever visits
+// where the theme cookie doesn't exist yet — after that, the server already
+// knows the choice and renders the right class directly (see `themeClass`
+// below), so this script has nothing to do.
+const NO_FLASH_SCRIPT = `(function(){try{if(!document.cookie.includes("hc-theme=")&&window.matchMedia("(prefers-color-scheme: dark)").matches){document.documentElement.classList.add("dark")}}catch(e){}})();`;
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Unauthenticated requests (the sign-in page) get a bare shell — the
-  // sidebar below fetches and displays hypcheck names, which must not render
-  // for anonymous visitors.
+  const theme = await getTheme();
+  const themeClass = theme === "dark" ? "dark" : theme === "light" ? "light" : "";
+  const fontVars = `${geistSans.variable} ${geistMono.variable} ${newsreader.variable}`;
+
+  // Unauthenticated requests (the sign-in page, /about) get a bare shell —
+  // the sidebar below fetches and displays hypcheck names, which must not
+  // render for anonymous visitors.
   const viewer = await getViewer();
   if (!viewer) {
     return (
-      <html lang="en">
-        <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>{children}</body>
+      <html lang="en" className={themeClass}>
+        <head>{!theme && <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />}</head>
+        <body className={`${fontVars} font-sans antialiased`}>{children}</body>
       </html>
     );
   }
@@ -39,8 +55,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   );
 
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+    <html lang="en" className={themeClass}>
+      <head>{!theme && <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />}</head>
+      <body className={`${fontVars} font-sans antialiased`}>
         <div className="flex min-h-screen">
           <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-edge bg-surface md:flex">
             <Link href="/" className="flex items-center gap-2.5 px-5 pt-5 pb-4">
@@ -115,6 +132,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <>Demo mode — simulated runs. Set <code className="font-mono">ANTHROPIC_API_KEY</code> for live research.</>
                 )}
               </p>
+              <Link href="/about" className="mt-1 inline-block text-[11.5px] font-medium text-ink-faint transition-colors hover:text-ink">
+                Design system →
+              </Link>
             </div>
 
             <div className="border-t border-edge px-4 py-3">
@@ -128,7 +148,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </div>
           </aside>
 
-          <main className="min-w-0 flex-1 md:pl-60">{children}</main>
+          <main className="min-w-0 flex-1 pb-16 md:pb-0 md:pl-60">{children}</main>
+          <MobileNav role={viewer.role} />
         </div>
       </body>
     </html>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getViewer } from "@/lib/authz";
 import { authConfigured } from "@/lib/auth";
@@ -39,7 +40,7 @@ export default async function SignInPage({
         </p>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-red-700">
+          <div className="mt-4 rounded-lg border border-band-weak/25 bg-band-weak-tint px-3.5 py-2.5 text-[12.5px] leading-relaxed text-band-weak">
             You couldn&apos;t be signed in. If you were invited, make sure you used the invited
             Google account — otherwise ask an administrator to add your email.
           </div>
@@ -56,6 +57,13 @@ export default async function SignInPage({
             </p>
           )}
         </div>
+
+        <Link
+          href="/about"
+          className="mt-6 block text-center text-[12px] font-medium text-ink-faint transition-colors hover:text-ink"
+        >
+          Not invited yet? Look at the design system →
+        </Link>
       </div>
     </main>
   );

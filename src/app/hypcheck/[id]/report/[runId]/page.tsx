@@ -4,7 +4,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getRun, listRuns } from "@/lib/store";
 import { formatDate, formatTime, stripReportPreamble } from "@/lib/format";
-import { ModeBadge, ScoreChip, StanceBadge } from "@/components/ScoreChip";
+import { ModeBadge, StanceBadge } from "@/components/ScoreChip";
+import { VerdictStamp } from "@/components/VerdictStamp";
 import { DeltaBadge } from "@/components/DeltaBadge";
 import { requireHypcheckAccess } from "@/lib/authz";
 
@@ -35,13 +36,10 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-edge bg-surface px-5 py-4 shadow-card">
-        <div className="flex items-center gap-3">
-          <span className="tnum text-[30px] font-semibold leading-none tracking-tight">{Math.round(run.pmfScore)}</span>
+        <div className="flex items-center gap-3.5">
+          <VerdictStamp score={run.pmfScore} size="md" />
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <ScoreChip score={run.pmfScore} size="sm" />
-              {prior && <DeltaBadge delta={run.pmfScore - prior.pmfScore} />}
-            </div>
+            {prior && <DeltaBadge delta={run.pmfScore - prior.pmfScore} />}
             <span className="text-[11.5px] text-ink-faint">
               Hypothesis v{run.hypothesisVersion} · confidence {Math.round(run.confidence * 100)}% · {formatTime(run.runAt)}
             </span>
