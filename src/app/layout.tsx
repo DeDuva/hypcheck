@@ -129,7 +129,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 )}
               </p>
               <Link href="/about" className="mt-1 inline-block text-[11.5px] font-medium text-ink-faint transition-colors hover:text-ink">
-                Design system →
+                About →
               </Link>
             </div>
 

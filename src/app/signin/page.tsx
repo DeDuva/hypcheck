@@ -62,7 +62,7 @@ export default async function SignInPage({
           href="/about"
           className="mt-6 block text-center text-[12px] font-medium text-ink-faint transition-colors hover:text-ink"
         >
-          Not invited yet? Look at the design system →
+          Not invited yet? Learn what this is →
         </Link>
       </div>
     </main>
