@@ -79,14 +79,13 @@ export default function AboutPage() {
           <div className="min-w-0">
             <p className="text-[14px] font-semibold text-ink">Dov Zimring</p>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink-soft">
-              I&rsquo;ve spent 15 years at Google building things from zero to one. I was Google Fiber&rsquo;s first
-              hire, working residential and small-business product — the Fiber Jack, the Network Box — while U.S.
-              broadband went from an average of around 5 Mbps to gigabit being table stakes. From there I led
-              zero-to-one infrastructure, product, and publishing for Stadia, Google&rsquo;s cloud gaming platform,
-              including Emmy-winning 4K/60 HDR silicon and the edge-compute network behind it. Today I lead product,
-              developer relations, data science, and go-to-market teams working on what AI-first software
-              development actually looks like — which is exactly what Hypcheck is: a small, real answer to a
-              question I ask my own teams every week.
+              25+ years building zero-to-one products through industry transitions — circuit to packet, megabit to
+              gigabit, local to cloud, and now human to AI. At Google I was Stadia&rsquo;s founding product lead,
+              taking cloud gaming from internal concept to a 22-country commercial launch with 400+ titles from EA,
+              Ubisoft, and Rockstar — then ran its wind-down myself, including the largest refund in Google&rsquo;s
+              history, and landed 99% of the team in new roles. Before that, I was Google Fiber&rsquo;s first hire.
+              After a year as interim lead across product, devrel, and data science, I&rsquo;m now a Product
+              Director on AI Foundations, focused on making Google build more 3P-forward and cloud-native.
             </p>
             <a
               href="https://www.linkedin.com/in/dovzimring/"
