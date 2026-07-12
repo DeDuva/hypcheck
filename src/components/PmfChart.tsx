@@ -29,7 +29,16 @@ export interface ChartPoint {
   carriedForward: boolean; // no fresh signal this run — every metric carried its prior score
 }
 
-const IRIS = "#4f46e5";
+// Recharts renders these straight through as SVG presentation attributes, so
+// a CSS var() resolves live at paint time — no runtime theme-resolution code
+// needed, dark mode "just works" the same way it does for every Tailwind
+// utility class elsewhere.
+const IRIS = "var(--color-iris)";
+const EDGE = "var(--color-edge)";
+const EDGE_STRONG = "var(--color-edge-strong)";
+const INK_FAINT = "var(--color-ink-faint)";
+const INK_SOFT = "var(--color-ink-soft)";
+const SURFACE = "var(--color-surface)";
 
 interface TooltipPayload {
   payload?: ChartPoint;
@@ -71,7 +80,7 @@ export function PmfChart({ points, hypcheckId }: { points: ChartPoint[]; hypchec
 
   return (
     <div>
-      <div className="h-[300px] w-full" data-testid="pmf-chart">
+      <div className="chart-grid h-[300px] w-full rounded-xl" data-testid="pmf-chart">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={points}
@@ -90,37 +99,37 @@ export function PmfChart({ points, hypcheckId }: { points: ChartPoint[]; hypchec
             <XAxis
               dataKey="date"
               tickFormatter={formatDateShort}
-              tick={{ fontSize: 11, fill: "#8a867a" }}
-              axisLine={{ stroke: "#e7e5df" }}
+              tick={{ fontSize: 11, fill: INK_FAINT }}
+              axisLine={{ stroke: EDGE }}
               tickLine={false}
               minTickGap={40}
             />
             <YAxis
               domain={[0, 100]}
               ticks={[0, 25, 50, 75, 100]}
-              tick={{ fontSize: 11, fill: "#8a867a" }}
+              tick={{ fontSize: 11, fill: INK_FAINT }}
               axisLine={false}
               tickLine={false}
             />
             {[40, 55, 70].map((y) => (
-              <ReferenceLine key={y} y={y} stroke="#e7e5df" strokeDasharray="3 4" />
+              <ReferenceLine key={y} y={y} stroke={EDGE} strokeDasharray="3 4" />
             ))}
             {versionMarkers.map((p) => (
               <ReferenceLine
                 key={p.runId}
                 x={p.date}
-                stroke="#b8b4a8"
+                stroke={EDGE_STRONG}
                 strokeDasharray="4 4"
                 label={{
                   value: `v${p.version}`,
                   position: "top",
                   fontSize: 10.5,
-                  fill: "#57544b",
+                  fill: INK_SOFT,
                   fontWeight: 600,
                 }}
               />
             ))}
-            <Tooltip content={<HoverTooltip />} cursor={{ stroke: "#d6d3cb", strokeWidth: 1 }} />
+            <Tooltip content={<HoverTooltip />} cursor={{ stroke: EDGE_STRONG, strokeWidth: 1 }} />
             <Area type="monotone" dataKey="score" stroke="none" fill="url(#pmfFill)" isAnimationActive={false} />
             <Line
               type="monotone"
@@ -133,21 +142,21 @@ export function PmfChart({ points, hypcheckId }: { points: ChartPoint[]; hypchec
                 const isPinned = payload.runId === pinnedId;
                 // Carried-forward runs (no fresh signal) render hollow and muted
                 // so a flat stretch reads as "nothing new", not "re-confirmed".
-                const stroke = payload.carriedForward ? "#b8b4a8" : IRIS;
+                const stroke = payload.carriedForward ? EDGE_STRONG : IRIS;
                 return (
                   <circle
                     key={`dot-${index}`}
                     cx={cx}
                     cy={cy}
                     r={isPinned ? 5 : 3}
-                    fill={isPinned ? stroke : "#fff"}
+                    fill={isPinned ? stroke : SURFACE}
                     stroke={stroke}
                     strokeWidth={isPinned ? 2 : 1.75}
                     style={{ cursor: "pointer" }}
                   />
                 );
               }}
-              activeDot={{ r: 5.5, fill: IRIS, stroke: "#fff", strokeWidth: 2, cursor: "pointer" }}
+              activeDot={{ r: 5.5, fill: IRIS, stroke: SURFACE, strokeWidth: 2, cursor: "pointer" }}
             />
           </ComposedChart>
         </ResponsiveContainer>

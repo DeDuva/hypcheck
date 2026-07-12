@@ -81,7 +81,7 @@ export function WatchlistEditor({ initial }: { initial: WatchlistEntry[] }) {
                   type="button"
                   onClick={() => setEntries((es) => es.filter((_, ei) => ei !== i))}
                   aria-label={`Remove ${w.name}`}
-                  className="rounded-md p-1 text-ink-faint transition-colors hover:bg-paper hover:text-rose-600"
+                  className="rounded-md p-1 text-ink-faint transition-colors hover:bg-paper hover:text-band-weak"
                 >
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
                     <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

@@ -22,10 +22,10 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except: the sign-in page, auth endpoints, cron (has its own
-  // secret), health (returns a stripped body when unauthenticated), and
-  // static assets.
+  // Everything except: the sign-in page, the public design-system page,
+  // auth endpoints, cron (has its own secret), health (returns a stripped
+  // body when unauthenticated), and static assets.
   matcher: [
-    "/((?!signin|api/auth|api/cron|api/health|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!signin|about|api/auth|api/cron|api/health|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

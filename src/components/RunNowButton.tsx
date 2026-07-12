@@ -57,7 +57,7 @@ export function RunNowButton({ hypcheckId, live }: { hypcheckId: string; live: b
         )}
       </button>
       {running && <RunProgress hypcheckId={hypcheckId} since={since} onFinished={onFinished} />}
-      {error && <p className="max-w-[260px] text-right text-[11.5px] leading-snug text-rose-600">{error}</p>}
+      {error && <p className="max-w-[260px] text-right text-[11.5px] leading-snug text-band-weak">{error}</p>}
     </div>
   );
 }

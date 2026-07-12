@@ -2,6 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import type { Viewer } from "@/lib/authz";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function UserMenu({ viewer }: { viewer: Viewer }) {
   return (
@@ -18,6 +19,7 @@ export function UserMenu({ viewer }: { viewer: Viewer }) {
         <span className="block truncate text-[12.5px] font-medium text-ink">{viewer.name}</span>
         <span className="block truncate text-[11px] text-ink-faint">{viewer.email}</span>
       </span>
+      <ThemeToggle />
       <button
         type="button"
         title="Sign out"

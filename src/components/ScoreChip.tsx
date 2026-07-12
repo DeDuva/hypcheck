@@ -1,11 +1,15 @@
 import type { AnalystStance, BandKey } from "@/lib/types";
 import { familyFromModelId, MODEL_FAMILY_SHORT_LABELS, scoreBand, STANCE_LABELS } from "@/lib/types";
 
+// Colors resolve through the token scale in globals.css (forest / slate teal
+// / brass / brick, light+dark paired) — never hardcode a Tailwind palette
+// color here, this object is the single source every other band-colored
+// component (Sparkline, PmfChart, VerdictStamp, the dashboard legend) reads.
 export const BAND_COLORS: Record<BandKey, { text: string; bg: string; dot: string; stroke: string }> = {
-  strong: { text: "text-emerald-700", bg: "bg-emerald-50", dot: "bg-emerald-500", stroke: "#059669" },
-  promising: { text: "text-teal-700", bg: "bg-teal-50", dot: "bg-teal-500", stroke: "#0d9488" },
-  emerging: { text: "text-amber-700", bg: "bg-amber-50", dot: "bg-amber-500", stroke: "#d97706" },
-  weak: { text: "text-rose-700", bg: "bg-rose-50", dot: "bg-rose-500", stroke: "#e11d48" },
+  strong: { text: "text-band-strong", bg: "bg-band-strong-tint", dot: "bg-band-strong", stroke: "var(--color-band-strong)" },
+  promising: { text: "text-band-promising", bg: "bg-band-promising-tint", dot: "bg-band-promising", stroke: "var(--color-band-promising)" },
+  emerging: { text: "text-band-emerging", bg: "bg-band-emerging-tint", dot: "bg-band-emerging", stroke: "var(--color-band-emerging)" },
+  weak: { text: "text-band-weak", bg: "bg-band-weak-tint", dot: "bg-band-weak", stroke: "var(--color-band-weak)" },
 };
 
 export function BandDot({ band, muted }: { band: BandKey; muted?: boolean }) {
@@ -51,12 +55,15 @@ export function ModeBadge({ mode, model }: { mode: "simulated" | "live"; model?:
   );
 }
 
-const STANCE_COLORS: Record<AnalystStance, { text: string; bg: string; dot: string }> = {
-  accelerate: { text: "text-emerald-700", bg: "bg-emerald-50", dot: "bg-emerald-500" },
-  advance: { text: "text-teal-700", bg: "bg-teal-50", dot: "bg-teal-500" },
-  hold: { text: "text-amber-700", bg: "bg-amber-50", dot: "bg-amber-500" },
-  reposition: { text: "text-orange-700", bg: "bg-orange-50", dot: "bg-orange-500" },
-  retreat: { text: "text-rose-700", bg: "bg-rose-50", dot: "bg-rose-500" },
+// A five-step diverging dial, deliberately a different hue family from
+// BAND_COLORS above — "what to do" and "how strong is the signal" are
+// different axes and shouldn't share a palette.
+export const STANCE_COLORS: Record<AnalystStance, { text: string; bg: string; dot: string }> = {
+  accelerate: { text: "text-stance-accelerate", bg: "bg-stance-accelerate-tint", dot: "bg-stance-accelerate" },
+  advance: { text: "text-stance-advance", bg: "bg-stance-advance-tint", dot: "bg-stance-advance" },
+  hold: { text: "text-stance-hold", bg: "bg-stance-hold-tint", dot: "bg-stance-hold" },
+  reposition: { text: "text-stance-reposition", bg: "bg-stance-reposition-tint", dot: "bg-stance-reposition" },
+  retreat: { text: "text-stance-retreat", bg: "bg-stance-retreat-tint", dot: "bg-stance-retreat" },
 };
 
 export function StanceBadge({ stance, conviction }: { stance: AnalystStance; conviction?: string }) {

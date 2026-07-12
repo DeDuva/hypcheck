@@ -170,7 +170,7 @@ export default async function SettingsPage({
             <ul className="mt-3.5 space-y-1.5 border-t border-edge pt-3.5">
               {hypcheck.refinement.rubric.map((check) => (
                 <li key={check.criterion} className="flex items-start gap-2 text-[12.5px]">
-                  <span className={check.pass ? "text-emerald-600" : "text-amber-600"} aria-hidden>
+                  <span className={check.pass ? "text-band-strong" : "text-stance-hold"} aria-hidden>
                     {check.pass ? "✓" : "✗"}
                   </span>
                   <span>
@@ -236,7 +236,7 @@ export default async function SettingsPage({
                     <form action={revokeHypcheckAccessAction.bind(null, id, grant.userId)}>
                       <button
                         type="submit"
-                        className="rounded-md px-2.5 py-1 text-[12px] font-medium text-rose-600/80 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                        className="rounded-md px-2.5 py-1 text-[12px] font-medium text-band-weak/80 transition-colors hover:bg-band-weak-tint hover:text-band-weak"
                       >
                         Remove
                       </button>
@@ -252,13 +252,13 @@ export default async function SettingsPage({
                   <p className="text-[12px] text-ink-faint">Invited — activates on first sign-in</p>
                 </div>
                 <div className="flex items-center gap-2.5">
-                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-amber-700 ring-1 ring-inset ring-amber-200">
+                  <span className="rounded-full bg-stance-hold-tint px-2.5 py-0.5 text-[11.5px] font-medium capitalize text-stance-hold ring-1 ring-inset ring-stance-hold/25">
                     {invite.role}
                   </span>
                   <form action={revokeInvitationAction.bind(null, id, invite.email)}>
                     <button
                       type="submit"
-                      className="rounded-md px-2.5 py-1 text-[12px] font-medium text-rose-600/80 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                      className="rounded-md px-2.5 py-1 text-[12px] font-medium text-band-weak/80 transition-colors hover:bg-band-weak-tint hover:text-band-weak"
                     >
                       Cancel invite
                     </button>
@@ -306,20 +306,20 @@ export default async function SettingsPage({
         </form>
 
         {shareError && (
-          <p className="mt-2.5 text-[12px] text-rose-600">{shareError}</p>
+          <p className="mt-2.5 text-[12px] text-band-weak">{shareError}</p>
         )}
       </div>
 
       {canDelete && (
-        <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50/40 p-5">
-          <h2 className="text-[13.5px] font-semibold text-rose-800">Danger zone</h2>
-          <p className="mt-1 text-[12.5px] text-rose-700/80">
+        <div className="mt-5 rounded-2xl border border-band-weak/25 bg-band-weak-tint/40 p-5">
+          <h2 className="text-[13.5px] font-semibold text-band-weak">Danger zone</h2>
+          <p className="mt-1 text-[12.5px] text-band-weak/80">
             Deletes this hypcheck with its full run history, reports, and insights. This cannot be undone.
           </p>
           <form action={deleteHypcheckAction.bind(null, id)} className="mt-3">
             <button
               type="submit"
-              className="rounded-lg bg-surface px-3.5 py-2 text-[12.5px] font-medium text-rose-700 ring-1 ring-inset ring-rose-200 transition-colors hover:bg-rose-50"
+              className="rounded-lg bg-surface px-3.5 py-2 text-[12.5px] font-medium text-band-weak ring-1 ring-inset ring-band-weak/25 transition-colors hover:bg-band-weak-tint"
             >
               Delete hypcheck
             </button>
