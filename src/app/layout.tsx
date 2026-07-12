@@ -24,15 +24,13 @@ export const metadata: Metadata = {
     "Establish a product hypothesis, track PMF signal over time with scheduled research runs, and fold insights back into the hypothesis.",
 };
 
-// Runs before hydration, once, only to cover the sliver of first-ever visits
-// where the theme cookie doesn't exist yet — after that, the server already
-// knows the choice and renders the right class directly (see `themeClass`
-// below), so this script has nothing to do.
-const NO_FLASH_SCRIPT = `(function(){try{if(!document.cookie.includes("hc-theme=")&&window.matchMedia("(prefers-color-scheme: dark)").matches){document.documentElement.classList.add("dark")}}catch(e){}})();`;
-
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const theme = await getTheme();
-  const themeClass = theme === "dark" ? "dark" : theme === "light" ? "light" : "";
+  // Dark is the default look — a visitor sees it unless they've explicitly
+  // clicked to light (persisted via the cookie). Resolved server-side, so
+  // there's no first-visit flash to guard against: the class the server
+  // sends down is already the final one.
+  const themeClass = theme === "light" ? "light" : "dark";
   const fontVars = `${geistSans.variable} ${geistMono.variable} ${newsreader.variable}`;
 
   // Unauthenticated requests (the sign-in page, /about) get a bare shell —
@@ -42,7 +40,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   if (!viewer) {
     return (
       <html lang="en" className={themeClass}>
-        <head>{!theme && <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />}</head>
         <body className={`${fontVars} font-sans antialiased`}>{children}</body>
       </html>
     );
@@ -56,7 +53,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" className={themeClass}>
-      <head>{!theme && <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />}</head>
       <body className={`${fontVars} font-sans antialiased`}>
         <div className="flex min-h-screen">
           <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-edge bg-surface md:flex">
