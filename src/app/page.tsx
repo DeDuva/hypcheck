@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/authz";
 import { countPendingProposals, listHypchecks, listRuns } from "@/lib/store";
-import { CADENCE_LABELS, scoreBand } from "@/lib/types";
+import { CADENCE_LABELS } from "@/lib/types";
 import { relativeDays } from "@/lib/format";
-import { ScoreChip } from "@/components/ScoreChip";
+import { VerdictStamp } from "@/components/VerdictStamp";
 import { Sparkline } from "@/components/Sparkline";
 import { DeltaBadge } from "@/components/DeltaBadge";
 
@@ -23,7 +23,7 @@ export default async function Dashboard() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10 lg:px-10">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Dashboard</h1>
           <p className="mt-1 text-[13.5px] text-ink-soft">
@@ -33,7 +33,7 @@ export default async function Dashboard() {
         {canCreate && (
           <Link
             href="/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-iris px-3.5 py-2 text-[13px] font-medium text-white shadow-card transition-colors hover:bg-iris-deep"
+            className="inline-flex items-center gap-1.5 self-start rounded-lg bg-iris px-3.5 py-2 text-[13px] font-medium text-white shadow-card transition-colors hover:bg-iris-deep sm:self-auto"
           >
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -66,7 +66,7 @@ export default async function Dashboard() {
           )}
         </div>
       ) : (
-        <div className="mt-8 grid gap-4 lg:grid-cols-2">
+        <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {cards.map(({ hypcheck, runs, pending }) => {
             const latest = runs[runs.length - 1];
             const prev = runs[runs.length - 2];
@@ -75,12 +75,12 @@ export default async function Dashboard() {
               <Link
                 key={hypcheck.id}
                 href={`/hypcheck/${hypcheck.id}`}
-                className="group rounded-2xl border border-edge bg-surface p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift"
+                className="group min-w-0 rounded-2xl border border-edge bg-surface p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="truncate text-[15px] font-semibold tracking-tight group-hover:text-iris">
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h2 className="truncate font-serif text-[16px] italic tracking-tight group-hover:text-iris">
                         {hypcheck.name}
                       </h2>
                       {hypcheck.status === "paused" && (
@@ -96,22 +96,15 @@ export default async function Dashboard() {
                     )}
                   </div>
                   {latest && (
-                    <div className="flex shrink-0 flex-col items-end">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="tnum text-[26px] font-semibold leading-none tracking-tight">
-                          {Math.round(latest.pmfScore)}
-                        </span>
-                        {prev && <DeltaBadge delta={latest.pmfScore - prev.pmfScore} />}
-                      </div>
-                      <div className="mt-1.5">
-                        <ScoreChip score={latest.pmfScore} size="sm" />
-                      </div>
+                    <div className="flex shrink-0 flex-col items-center gap-1">
+                      <VerdictStamp score={latest.pmfScore} size="md" />
+                      {prev && <DeltaBadge delta={latest.pmfScore - prev.pmfScore} />}
                     </div>
                   )}
                 </div>
 
-                <div className="mt-4 flex items-end justify-between">
-                  <div className="flex items-center gap-3 text-[12px] text-ink-faint">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-ink-faint">
                     <span>{CADENCE_LABELS[hypcheck.cadence]}</span>
                     <span aria-hidden>·</span>
                     <span>{runs.length} runs</span>
@@ -122,7 +115,7 @@ export default async function Dashboard() {
                       </>
                     )}
                     {pending > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-stance-hold-tint px-2 py-0.5 font-medium text-stance-hold">
                         {pending} proposal{pending > 1 ? "s" : ""} pending
                       </span>
                     )}
@@ -137,10 +130,10 @@ export default async function Dashboard() {
 
       {cards.length > 0 && (
         <p className="mt-8 text-[12px] text-ink-faint">
-          Bands: <span className="text-rose-600 font-medium">weak</span> &lt; 40 ·{" "}
-          <span className="text-amber-600 font-medium">emerging</span> 40–54 ·{" "}
-          <span className="text-teal-600 font-medium">promising</span> 55–69 ·{" "}
-          <span className="text-emerald-600 font-medium">strong</span> ≥ 70
+          Bands: <span className="font-medium text-band-weak">weak</span> &lt; 40 ·{" "}
+          <span className="font-medium text-band-emerging">emerging</span> 40–54 ·{" "}
+          <span className="font-medium text-band-promising">promising</span> 55–69 ·{" "}
+          <span className="font-medium text-band-strong">strong</span> ≥ 70
         </p>
       )}
     </div>

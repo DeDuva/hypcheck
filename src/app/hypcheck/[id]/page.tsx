@@ -3,7 +3,8 @@ import { listInsights, listMetrics, listRuns, listVersions } from "@/lib/store";
 import { CADENCE_LABELS, DEPTH_LABELS, scoreBand, WATCHLIST_CATEGORY_LABELS } from "@/lib/types";
 import { formatDate, formatDateShort, relativeDays } from "@/lib/format";
 import { PmfChart, type ChartPoint } from "@/components/PmfChart";
-import { ModeBadge, ScoreChip } from "@/components/ScoreChip";
+import { BAND_COLORS, ModeBadge } from "@/components/ScoreChip";
+import { VerdictStamp } from "@/components/VerdictStamp";
 import { DeltaBadge } from "@/components/DeltaBadge";
 import { InsightCard } from "@/components/InsightsPanel";
 import { RunNowButton } from "@/components/RunNowButton";
@@ -62,7 +63,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
             <span aria-hidden>/</span>
             <span className="text-ink-soft">{hypcheck.name}</span>
           </div>
-          <h1 className="mt-1.5 text-[22px] font-semibold tracking-tight">{hypcheck.name}</h1>
+          <h1 className="mt-1.5 text-balance font-serif text-headline italic tracking-tight">{hypcheck.name}</h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-2.5 text-[12.5px] text-ink-faint">
             <span>{CADENCE_LABELS[hypcheck.cadence]} runs</span>
             <span aria-hidden>·</span>
@@ -108,7 +109,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
               v{current.version}
             </span>
           </div>
-          <blockquote className="mt-3 border-l-[3px] border-iris pl-4 text-[14.5px] leading-relaxed text-ink">
+          <blockquote className="mt-3 border-l-[3px] border-iris pl-4 font-serif text-subhead italic leading-relaxed text-ink">
             {current.statement}
           </blockquote>
           {current.changeSummary && (
@@ -181,15 +182,12 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Current PMF score</h2>
             {latest ? (
               <>
-                <div className="mt-3 flex items-baseline gap-2.5">
-                  <span className="tnum text-[44px] font-semibold leading-none tracking-tight">
-                    {Math.round(latest.pmfScore)}
-                  </span>
-                  {prev && <DeltaBadge delta={latest.pmfScore - prev.pmfScore} />}
-                </div>
-                <div className="mt-2.5 flex items-center gap-2">
-                  <ScoreChip score={latest.pmfScore} />
-                  <ModeBadge mode={latest.mode} model={latest.model} />
+                <div className="mt-3 flex items-center gap-4">
+                  <VerdictStamp score={latest.pmfScore} size="lg" />
+                  <div className="flex flex-col gap-1.5">
+                    {prev && <DeltaBadge delta={latest.pmfScore - prev.pmfScore} />}
+                    <ModeBadge mode={latest.mode} model={latest.model} />
+                  </div>
                 </div>
                 <p className="mt-3 text-[12px] text-ink-faint">
                   Last run {formatDate(latest.runAt)} · confidence {Math.round(latest.confidence * 100)}%
@@ -218,18 +216,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
                     </span>
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-16 overflow-hidden rounded-full bg-paper">
-                        <div
-                          className={`h-full rounded-full ${
-                            band.key === "strong"
-                              ? "bg-emerald-500"
-                              : band.key === "promising"
-                                ? "bg-teal-500"
-                                : band.key === "emerging"
-                                  ? "bg-amber-500"
-                                  : "bg-rose-500"
-                          }`}
-                          style={{ width: `${ms.score}%` }}
-                        />
+                        <div className={`h-full rounded-full ${BAND_COLORS[band.key].dot}`} style={{ width: `${ms.score}%` }} />
                       </div>
                       <span className="tnum w-6 text-right text-[12px] font-medium text-ink-soft">
                         {Math.round(ms.score)}
@@ -262,7 +249,7 @@ export default async function HypcheckOverview({ params }: { params: Promise<{ i
           <div className="mb-2.5 flex items-center justify-between px-1">
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Insights</h2>
             {pendingProposals.length > 0 && (
-              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              <span className="rounded-full bg-stance-hold-tint px-2 py-0.5 text-[11px] font-medium text-stance-hold">
                 {pendingProposals.length} proposal{pendingProposals.length > 1 ? "s" : ""} awaiting review
               </span>
             )}

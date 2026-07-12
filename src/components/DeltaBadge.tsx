@@ -7,7 +7,7 @@ export function DeltaBadge({ delta }: { delta: number }) {
   }
   const up = rounded > 0;
   return (
-    <span className={`tnum inline-flex items-center gap-0.5 text-[12.5px] font-medium ${up ? "text-emerald-600" : "text-rose-600"}`}>
+    <span className={`tnum inline-flex items-center gap-0.5 text-[12.5px] font-medium ${up ? "text-band-strong" : "text-band-weak"}`}>
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden className={up ? "" : "rotate-180"}>
         <path d="M5 8V2M2 5l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>

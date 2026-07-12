@@ -228,7 +228,7 @@ export function Wizard() {
                   <ul className="mt-3 space-y-1">
                     {refine.rubric.map((check) => (
                       <li key={check.criterion} className="flex items-start gap-2 text-[12.5px]">
-                        <span className={check.pass ? "text-emerald-600" : "text-amber-600"} aria-hidden>
+                        <span className={check.pass ? "text-band-strong" : "text-stance-hold"} aria-hidden>
                           {check.pass ? "✓" : "✗"}
                         </span>
                         <span>
@@ -243,7 +243,7 @@ export function Wizard() {
                 {refine.refinedStatement.trim() !== statement.trim() && (
                   <>
                     <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-iris">Sharper framing</p>
-                    <p className="mt-1.5 text-[13px] leading-relaxed text-ink">{refine.refinedStatement}</p>
+                    <p className="mt-1.5 font-serif text-[14px] italic leading-relaxed text-ink">{refine.refinedStatement}</p>
                     <button
                       type="button"
                       onClick={() => setStatement(refine.refinedStatement)}
@@ -311,7 +311,7 @@ export function Wizard() {
                       className="w-52 rounded-lg border border-edge bg-surface px-2.5 py-1.5 text-[13px] font-medium outline-none focus:border-iris"
                     />
                     {m.vetted && !looksInternal(m) && (
-                      <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-medium text-emerald-700">
+                      <span className="shrink-0 rounded-full bg-band-strong-tint px-2 py-0.5 text-[10.5px] font-medium text-band-strong">
                         external signal
                       </span>
                     )}
@@ -332,7 +332,7 @@ export function Wizard() {
                     <button
                       type="button"
                       onClick={() => setMetrics((ms) => ms.filter((_, xi) => xi !== i))}
-                      className="ml-auto rounded-md p-1 text-ink-faint transition-colors hover:bg-paper hover:text-rose-600"
+                      className="ml-auto rounded-md p-1 text-ink-faint transition-colors hover:bg-paper hover:text-band-weak"
                       aria-label={`Remove ${m.name}`}
                     >
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -361,7 +361,7 @@ export function Wizard() {
                     className="mt-1.5 w-full rounded-lg border border-edge bg-surface px-2.5 py-1.5 text-[12.5px] text-ink-soft outline-none focus:border-iris"
                   />
                   {looksInternal(m) && (
-                    <p className="mt-1.5 text-[11.5px] text-amber-700/90">
+                    <p className="mt-1.5 text-[11.5px] text-stance-hold">
                       Looks like this needs internal data — no run can observe it from public sources. Reframe it around a
                       public proxy (pricing, hiring, launches, search volume).
                     </p>
@@ -480,7 +480,7 @@ export function Wizard() {
                           type="button"
                           onClick={() => setWatchlist((ws) => ws.filter((_, wi) => wi !== i))}
                           aria-label={`Remove ${w.name}`}
-                          className="rounded-md p-1 text-ink-faint transition-colors hover:bg-paper hover:text-rose-600"
+                          className="rounded-md p-1 text-ink-faint transition-colors hover:bg-paper hover:text-band-weak"
                         >
                           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
                             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -547,7 +547,7 @@ export function Wizard() {
 
             <div className="rounded-xl border border-edge bg-paper/50 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Summary</p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-ink">{statement}</p>
+              <p className="mt-1.5 font-serif text-[14px] italic leading-relaxed text-ink">{statement}</p>
               <p className="mt-2 text-[12px] text-ink-faint">
                 {CADENCE_LABELS[cadence]} · {DEPTH_LABELS[depth]} · {metrics.length} metrics ·{" "}
                 {watchlist.length ? `watching ${watchlist.map((w) => w.name).join(", ")}` : "no watchlist"}

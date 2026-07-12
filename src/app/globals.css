@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* Enables `dark:` utilities keyed off a class on <html> (set server-side in
+   layout.tsx from the theme cookie, see lib/theme.ts) rather than only the
+   OS media query — needed for a user-toggleable theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Token architecture: @theme defines the LIGHT values and is what registers
+ * Tailwind utilities (bg-paper, text-band-strong, etc.) — every one of those
+ * utilities compiles to `var(--color-x)`. Dark values are authored as plain
+ * CSS overrides of the same variable names below (media query for
+ * before-first-visit system fallback, .dark class for the persisted
+ * choice) — components never need a `dark:` variant for color, only for the
+ * rare non-color adjustment (shadow intensity, texture opacity).
+ */
 @theme {
   --color-paper: #f7f6f2;
   --color-surface: #ffffff;
@@ -8,15 +22,143 @@
   --color-ink: #211f1a;
   --color-ink-soft: #57544b;
   --color-ink-faint: #8a867a;
+
   --color-iris: #4f46e5;
   --color-iris-deep: #4338ca;
   --color-iris-soft: #eef2ff;
 
+  /* Verdict bands — forest / slate teal / brass / brick. Hand-tuned, not
+     Tailwind's default emerald/teal/amber/rose. `-tint` is the 14% wash used
+     for chip backgrounds, derived so light/dark tinting stays correct
+     without hand-authoring a separate tint per mode. */
+  --color-band-strong: #2f6f4f;
+  --color-band-strong-tint: color-mix(in oklch, var(--color-band-strong) 14%, var(--color-surface));
+  --color-band-promising: #3b7d8c;
+  --color-band-promising-tint: color-mix(in oklch, var(--color-band-promising) 14%, var(--color-surface));
+  --color-band-emerging: #b8862f;
+  --color-band-emerging-tint: color-mix(in oklch, var(--color-band-emerging) 14%, var(--color-surface));
+  --color-band-weak: #b34a3c;
+  --color-band-weak-tint: color-mix(in oklch, var(--color-band-weak) 14%, var(--color-surface));
+
+  /* Analyst's stance — a five-step diverging dial, deliberately a different
+     hue family from the bands above: "how strong is the signal" and "what
+     should you do about it" are different axes and shouldn't share a palette. */
+  --color-stance-accelerate: #2563a8;
+  --color-stance-accelerate-tint: color-mix(in oklch, var(--color-stance-accelerate) 14%, var(--color-surface));
+  --color-stance-advance: #4f8a7f;
+  --color-stance-advance-tint: color-mix(in oklch, var(--color-stance-advance) 14%, var(--color-surface));
+  --color-stance-hold: #9c7d3f;
+  --color-stance-hold-tint: color-mix(in oklch, var(--color-stance-hold) 14%, var(--color-surface));
+  --color-stance-reposition: #c1652f;
+  --color-stance-reposition-tint: color-mix(in oklch, var(--color-stance-reposition) 14%, var(--color-surface));
+  --color-stance-retreat: #a13a2f;
+  --color-stance-retreat-tint: color-mix(in oklch, var(--color-stance-retreat) 14%, var(--color-surface));
+
+  /* Redline marks for the hypothesis diff view — a blue pencil for
+     insertions, a red pencil for strikethroughs. Kept separate from the
+     band/stance reds: a text correction isn't a verdict. */
+  --color-diff-add: #2f5a8a;
+  --color-diff-remove: #ad4433;
+
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-newsreader), "Iowan Old Style", Georgia, serif;
+
+  /* Named type scale — the mechanism for retiring ad hoc text-[13.5px]
+     values. Size + line-height only; family/weight/tracking stay separate
+     utilities so components can mix (e.g. text-headline is always paired
+     with font-serif italic explicitly, since not every headline is one). */
+  --text-display: 2.75rem;
+  --text-display--line-height: 1.05;
+  --text-headline: 1.85rem;
+  --text-headline--line-height: 1.25;
+  --text-subhead: 1.125rem;
+  --text-subhead--line-height: 1.4;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.65;
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1.4;
+  --text-data: 0.8125rem;
+  --text-data--line-height: 1.3;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.5;
 
   --shadow-card: 0 1px 2px rgb(33 31 26 / 0.04), 0 1px 3px rgb(33 31 26 / 0.06);
   --shadow-lift: 0 4px 12px rgb(33 31 26 / 0.08), 0 1px 3px rgb(33 31 26 / 0.06);
+
+  --color-grid-dot: rgb(33 31 26 / 0.08);
+}
+
+/* System-preference fallback for a first-ever visit, before any cookie
+   exists. `:not(.light)` lets an explicit light choice win over a dark OS
+   preference — the .dark class below always wins over both. */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --color-paper: #17150f;
+    --color-surface: #201d16;
+    --color-edge: #332e22;
+    --color-edge-strong: #423c2c;
+    --color-ink: #f1ecdf;
+    --color-ink-soft: #b6ad9a;
+    --color-ink-faint: #83795f;
+
+    --color-iris: #8d88f2;
+    --color-iris-deep: #a8a4f7;
+    --color-iris-soft: #26243d;
+
+    --color-band-strong: #4f9c78;
+    --color-band-promising: #5fa6b5;
+    --color-band-emerging: #d9a84f;
+    --color-band-weak: #d9705f;
+
+    --color-stance-accelerate: #6fa8e8;
+    --color-stance-advance: #7cb7ab;
+    --color-stance-hold: #cba965;
+    --color-stance-reposition: #e28a54;
+    --color-stance-retreat: #cf6152;
+
+    --color-diff-add: #7aa6e0;
+    --color-diff-remove: #d97a6a;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.35);
+    --shadow-lift: 0 8px 20px rgb(0 0 0 / 0.4), 0 2px 6px rgb(0 0 0 / 0.28);
+
+    --color-grid-dot: rgb(241 236 223 / 0.08);
+  }
+}
+
+/* Persisted (cookie-backed) choice — always wins. */
+.dark {
+  --color-paper: #17150f;
+  --color-surface: #201d16;
+  --color-edge: #332e22;
+  --color-edge-strong: #423c2c;
+  --color-ink: #f1ecdf;
+  --color-ink-soft: #b6ad9a;
+  --color-ink-faint: #83795f;
+
+  --color-iris: #8d88f2;
+  --color-iris-deep: #a8a4f7;
+  --color-iris-soft: #26243d;
+
+  --color-band-strong: #4f9c78;
+  --color-band-promising: #5fa6b5;
+  --color-band-emerging: #d9a84f;
+  --color-band-weak: #d9705f;
+
+  --color-stance-accelerate: #6fa8e8;
+  --color-stance-advance: #7cb7ab;
+  --color-stance-hold: #cba965;
+  --color-stance-reposition: #e28a54;
+  --color-stance-retreat: #cf6152;
+
+  --color-diff-add: #7aa6e0;
+  --color-diff-remove: #d97a6a;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-lift: 0 8px 20px rgb(0 0 0 / 0.4), 0 2px 6px rgb(0 0 0 / 0.28);
+
+  --color-grid-dot: rgb(241 236 223 / 0.08);
 }
 
 body {
@@ -29,6 +171,14 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
 /* Rendered markdown reports */
 .report-md {
   line-height: 1.7;
@@ -36,16 +186,20 @@ body {
   color: var(--color-ink-soft);
 }
 .report-md h1 {
-  font-size: 1.5rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 1.6rem;
+  font-weight: 460;
+  letter-spacing: -0.01em;
   color: var(--color-ink);
   margin: 0 0 0.75rem;
 }
 .report-md h2 {
-  font-size: 1.125rem;
-  font-weight: 620;
-  letter-spacing: -0.01em;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 1.2rem;
+  font-weight: 460;
+  letter-spacing: -0.005em;
   color: var(--color-ink);
   margin: 2rem 0 0.625rem;
   padding-top: 1.25rem;
@@ -106,4 +260,32 @@ body {
   border: none;
   border-top: 1px solid var(--color-edge);
   margin: 1.5rem 0;
+}
+
+/* Chart texture — a faint dot grid, reserved for chart backgrounds only
+   (not a global pattern), reinforcing the "instrument reading" idiom. */
+.chart-grid {
+  background-image: radial-gradient(var(--color-grid-dot) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* VerdictStamp — a gauge-like ring of tick marks around the score. The ring
+   color comes from --stamp-color, set inline by the component per band. */
+.verdict-stamp::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--stamp-color);
+  opacity: 0.9;
+}
+.verdict-stamp::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(var(--stamp-color) 0deg 2deg, transparent 2deg 9deg);
+  -webkit-mask: radial-gradient(circle, transparent calc(50% - 4px), #000 calc(50% - 4px) calc(50% - 2px), transparent calc(50% - 2px));
+  mask: radial-gradient(circle, transparent calc(50% - 4px), #000 calc(50% - 4px) calc(50% - 2px), transparent calc(50% - 2px));
+  opacity: 0.6;
 }

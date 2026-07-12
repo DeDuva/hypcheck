@@ -2,10 +2,14 @@ import Link from "next/link";
 import type { Trace, TraceSpan, TraceSpanKind } from "@/lib/types";
 import { formatDateTime, formatMs } from "@/lib/format";
 
+// ok/error/running read the same as everywhere else a state needs a verdict:
+// confirmed-good, confirmed-bad, or in-progress — so they borrow band-strong/
+// band-weak/stance-hold rather than a one-off palette, and stay correct in
+// dark mode for free.
 export const STATUS_STYLE: Record<string, string> = {
-  ok: "bg-emerald-50 text-emerald-700",
-  error: "bg-rose-50 text-rose-700",
-  running: "bg-amber-50 text-amber-700",
+  ok: "bg-band-strong-tint text-band-strong",
+  error: "bg-band-weak-tint text-band-weak",
+  running: "bg-stance-hold-tint text-stance-hold",
 };
 
 export const KIND_LABEL: Record<string, string> = {
@@ -13,14 +17,17 @@ export const KIND_LABEL: Record<string, string> = {
   refine: "Hypothesis refine",
 };
 
-// Fixed categorical order, validated for CVD separation with scripts/validate_palette.js
-// ("#4f46e5,#0d9488,#d97706,#e11d48" — all checks pass). "thinking" reuses the app's
-// existing --color-iris token; the others are never reused for anything else here.
+// Four-way categorical split for the waterfall — distinct hues, not a
+// verdict scale, but still sourced from the token system so the light
+// backgrounds stay correct (not blown-out) against a dark surface.
+// "thinking" reuses --color-iris (the app's one true accent); the other
+// three borrow the stance/band hue families for their token plumbing
+// without carrying their band/stance meaning into this unrelated context.
 const SPAN_STYLE: Record<TraceSpanKind, { bar: string; text: string; bg: string }> = {
   thinking: { bar: "bg-iris", text: "text-iris", bg: "bg-iris-soft" },
-  web_search_query: { bar: "bg-teal-600", text: "text-teal-700", bg: "bg-teal-50" },
-  web_search_result: { bar: "bg-amber-600", text: "text-amber-700", bg: "bg-amber-50" },
-  text_output: { bar: "bg-rose-600", text: "text-rose-700", bg: "bg-rose-50" },
+  web_search_query: { bar: "bg-stance-advance", text: "text-stance-advance", bg: "bg-stance-advance-tint" },
+  web_search_result: { bar: "bg-stance-hold", text: "text-stance-hold", bg: "bg-stance-hold-tint" },
+  text_output: { bar: "bg-band-weak", text: "text-band-weak", bg: "bg-band-weak-tint" },
   other: { bar: "bg-edge-strong", text: "text-ink-faint", bg: "bg-paper" },
 };
 
@@ -80,7 +87,7 @@ export function TraceDetailBody({
       </div>
 
       {trace.error && (
-        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-[12.5px] text-rose-700">
+        <div className="mt-4 rounded-xl border border-band-weak/25 bg-band-weak-tint p-4 text-[12.5px] text-band-weak">
           <p className="font-medium">Error</p>
           <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[11.5px]">{trace.error}</pre>
         </div>
