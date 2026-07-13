@@ -69,6 +69,24 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* Design system CTA */}
+      <Link
+        href="/about/design-system"
+        className="group mt-10 flex items-center justify-between gap-4 rounded-2xl border border-edge bg-surface p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift"
+      >
+        <div>
+          <p className="font-serif text-[19px] italic tracking-tight text-ink group-hover:text-iris">
+            The design system
+          </p>
+          <p className="mt-1 text-[12.5px] text-ink-soft">
+            Every color, type step, and component decision — a live page, not a deck.
+          </p>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0 text-ink-faint transition-colors group-hover:text-iris" aria-hidden>
+          <path d="M6 3.5L11 8l-5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </Link>
+
       {/* Who built it */}
       <section className="mt-10">
         <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Who built it</h2>
@@ -79,13 +97,8 @@ export default function AboutPage() {
           <div className="min-w-0">
             <p className="text-[14px] font-semibold text-ink">Dov Zimring</p>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink-soft">
-              25+ years building zero-to-one products through industry transitions — circuit to packet, megabit to
-              gigabit, local to cloud, and now human to AI. At Google I was Stadia&rsquo;s founding product lead,
-              taking cloud gaming from internal concept to a 22-country commercial launch with 400+ titles from EA,
-              Ubisoft, and Rockstar — then ran its wind-down myself, including the largest refund in Google&rsquo;s
-              history, and landed 99% of the team in new roles. Before that, I was Google Fiber&rsquo;s first hire.
-              After a year as interim lead across product, devrel, and data science, I&rsquo;m now a Product
-              Director on AI Foundations, focused on making Google build more 3P-forward and cloud-native.
+              25 years building zero-to-one products through industry transitions — circuit to packet, megabit to
+              gigabit, local to cloud, and now human to AI.
             </p>
             <a
               href="https://www.linkedin.com/in/dovzimring/"
@@ -101,25 +114,6 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
-
-      {/* Design system CTA */}
-      <Link
-        href="/about/design-system"
-        className="group mt-10 flex items-center justify-between gap-4 rounded-2xl border border-edge bg-surface p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift"
-      >
-        <div>
-          <p className="text-label font-semibold uppercase tracking-[0.1em] text-ink-faint">Also worth a look</p>
-          <p className="mt-1 font-serif text-[17px] italic tracking-tight text-ink group-hover:text-iris">
-            The design system behind it
-          </p>
-          <p className="mt-1 text-[12.5px] text-ink-soft">
-            Every color, type step, and component decision — a live page, not a deck.
-          </p>
-        </div>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0 text-ink-faint transition-colors group-hover:text-iris" aria-hidden>
-          <path d="M6 3.5L11 8l-5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </Link>
     </div>
   );
 }
