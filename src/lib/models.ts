@@ -48,7 +48,7 @@ export function familyShape(family: ModelFamily): FamilyRequestShape {
 // instances are short-lived anyway, so staleness is bounded by cold starts.
 const REFRESH_MS = 6 * 60 * 60 * 1000;
 
-let latestByFamily: Partial<Record<ModelFamily, string>> = {};
+const latestByFamily: Partial<Record<ModelFamily, string>> = {};
 let lastRefresh = 0;
 let refreshing: Promise<void> | null = null;
 

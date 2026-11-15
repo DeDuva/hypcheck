@@ -21,6 +21,8 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         >
           Try again
         </button>
+        {/* A full page load, not <Link>: after an error the client state itself may be what broke. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a href="/" className="rounded-lg px-4 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:text-ink">
           Back to dashboard
         </a>
