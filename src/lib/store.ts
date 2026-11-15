@@ -907,7 +907,8 @@ export async function applyWatchlistChange(hypcheckId: string, change: Watchlist
  * means the function was killed mid-run (hard timeout).
  */
 export interface RunAttempt {
-  status: "running" | "ok" | "error";
+  /** queued = dispatched to GitHub Actions, not yet picked up by a runner. */
+  status: "queued" | "running" | "ok" | "error";
   hypcheckId: string;
   hypcheckName: string;
   model: string;

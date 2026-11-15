@@ -14,10 +14,9 @@ import { reviseHypothesisAction } from "@/lib/actions";
 import { requireHypcheckAccess } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
-// This route hosts runNowAction, whose after() callback runs the (long) live
-// research in the background — so it needs the extended budget. Pro + Fluid
-// Compute (default) allows up to 800s.
-export const maxDuration = 800;
+// This route hosts runNowAction, which only dispatches research to GitHub
+// Actions (src/lib/dispatch.ts) — the run itself never executes on Vercel.
+export const maxDuration = 60;
 
 export default async function HypcheckOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

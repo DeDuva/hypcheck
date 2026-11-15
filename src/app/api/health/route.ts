@@ -50,10 +50,16 @@ export async function GET(request: Request) {
     counts = { hypchecks: stats.hypchecks, runs: stats.runs, insights: stats.insights };
     const attempt = await getLastRunAttempt();
     if (attempt) {
-      // A "running" attempt older than ~6 min never finished — the function was
-      // killed mid-run (hard timeout).
-      const ageMs = Date.now() - new Date(attempt.startedAt).getTime();
-      lastAttempt = { ...attempt, stale: attempt.status === "running" && ageMs > 6 * 60 * 1000 };
+      // Runs execute on GitHub Actions (research.yml). A "queued" attempt no
+      // runner picked up within 10 min, or a "running" one older than 20 min
+      // (the engine aborts research at 10), never finished — check the
+      // workflow's run log.
+      const ageMs = Date.now() - new Date(attempt.updatedAt ?? attempt.startedAt).getTime();
+      const staleAfterMs = attempt.status === "queued" ? 10 * 60_000 : 20 * 60_000;
+      lastAttempt = {
+        ...attempt,
+        stale: (attempt.status === "queued" || attempt.status === "running") && ageMs > staleAfterMs,
+      };
     }
     if (wantWriteProbe) writeProbe = await probeWrite();
     if (stats.lastRun) {
