@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { watchRun, type RunOutcome } from "@/lib/runStatus";
+import { watchRun, type RunOutcome, type RunTick } from "@/lib/runStatus";
 
 function computePct(elapsedMs: number, phase: string | undefined, done: boolean): number {
   if (done) return 100;
@@ -13,8 +13,9 @@ function computePct(elapsedMs: number, phase: string | undefined, done: boolean)
   return Math.min(96, base);
 }
 
-function phaseLabel(phase: string | undefined, elapsedMs: number): string {
+function phaseLabel(status: RunTick["status"] | undefined, phase: string | undefined, elapsedMs: number): string {
   if (phase === "research_done") return "Synthesizing the analysis and writing the report…";
+  if (status === "queued") return "Queued — starting a research runner…";
   if (elapsedMs < 4_000) return "Starting the run…";
   return "Researching the market — searching the web and gathering sources…";
 }
@@ -40,6 +41,7 @@ export function RunProgress({
 }) {
   const [elapsedMs, setElapsedMs] = useState(Date.now() - since);
   const [phase, setPhase] = useState<string | undefined>();
+  const [status, setStatus] = useState<RunTick["status"] | undefined>();
   const [done, setDone] = useState(false);
   const router = useRouter();
   const onFinishedRef = useRef(onFinished);
@@ -49,7 +51,11 @@ export function RunProgress({
     const timer = setInterval(() => setElapsedMs(Date.now() - since), 1000);
     let cancelled = false;
 
-    watchRun(hypcheckId, { since, onTick: (t) => !cancelled && setPhase(t.phase) }).then((outcome) => {
+    watchRun(hypcheckId, { since, onTick: (t) => {
+        if (cancelled) return;
+        setPhase(t.phase);
+        setStatus(t.status);
+      } }).then((outcome) => {
       if (cancelled) return;
       clearInterval(timer);
       if (outcome === "ok") {
@@ -75,7 +81,7 @@ export function RunProgress({
     <div className="w-full max-w-md">
       <div className="flex items-center justify-between gap-3">
         <span className="text-[12.5px] text-ink-soft">
-          {done ? "Done — updating…" : phaseLabel(phase, elapsedMs)}
+          {done ? "Done — updating…" : phaseLabel(status, phase, elapsedMs)}
         </span>
         <span className="tnum shrink-0 text-[12px] text-ink-faint">{mmss(elapsedMs)}</span>
       </div>

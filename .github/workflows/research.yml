@@ -1,0 +1,56 @@
+name: Research
+
+# Runs hypcheck research (src/lib/engine executeRun) against the production
+# Turso DB. Dispatched by the app — the daily Vercel cron (/api/cron) and the
+# "Run now" button — through the GitHub API; see src/lib/dispatch.ts.
+#
+# Deliberately NOT on an Actions `schedule:`. GitHub silently disables
+# scheduled workflows after 60 days without a push to the repo; a dispatched
+# workflow is never disabled. The schedule lives in vercel.json.
+#
+# Can also be run by hand: Actions → Research → Run workflow (leave the id
+# empty to run every due hypcheck).
+
+on:
+  workflow_dispatch:
+    inputs:
+      hypcheck_id:
+        description: "Hypcheck id to run now (empty = every due hypcheck)"
+        required: false
+        type: string
+        default: ""
+
+run-name: "Research ${{ inputs.hypcheck_id || '(all due)' }}"
+
+permissions:
+  contents: read
+
+# One job per hypcheck at a time; a second dispatch for the same one waits
+# rather than cancelling a run that is already spending tokens.
+concurrency:
+  group: research-${{ inputs.hypcheck_id || 'all-due' }}
+  cancel-in-progress: false
+
+jobs:
+  research:
+    # Production secrets only ever run reviewed code from main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # A run is ~200–300 s, with a 600 s abort backstop in the engine, per
+    # hypcheck. "All due" runs them one after another.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Run research
+        run: npx tsx scripts/research.ts
+        env:
+          HYPCHECK_ID: ${{ inputs.hypcheck_id }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          HYPCHECK_LOG_LEVEL: info

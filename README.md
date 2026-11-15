@@ -8,7 +8,7 @@ Establish a product hypothesis, then track its product-market-fit signal over ti
 - **Creation wizard** — write the hypothesis, get an AI critique + sharper framing, pick weighted signal metrics, set cadence (weekly default), research depth, and a competitive watchlist.
 - **Hypcheck overview** — interactive PMF time-series (hover a point for the run's exec summary, click to pin it and open the full report), hypothesis version history with word-level diffs, insights feed with **Accept / Dismiss** on proposed revisions, run history, and metric breakdown.
 - **Full reports** — markdown research report per run.
-- **Scheduled runs** — `/api/cron` + Vercel Cron re-tests due hypchecks automatically.
+- **Scheduled runs** — Vercel Cron hits `/api/cron` daily, which dispatches a GitHub Actions research job for each due hypcheck (see **Research runner**).
 - **Invite-only access** — Google sign-in (Better Auth); only emails on the `ALLOWED_EMAILS` list get in. Every page and server action is gated server-side.
 
 ## Two engines
@@ -79,7 +79,21 @@ Enforcement supports a **shadow mode**: denials are logged (`authz.hypcheck.deni
    - `TURSO_AUTH_TOKEN`
 3. Set the access-control env vars (see **Access control** above): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BETTER_AUTH_SECRET`, `ALLOWED_EMAILS`.
 4. Optionally set `ANTHROPIC_API_KEY` (live research), `CRON_SECRET` (protects `/api/cron`; Vercel sends it automatically as a Bearer token), and `HYPCHECK_DEMO=1` if you want the demo data seeded (in production it's opt-in).
-5. Deploy. `vercel.json` schedules the cron daily at 09:00 UTC; each hit runs every hypcheck whose `nextRunAt` has passed, so per-hypcheck cadence (daily/weekly/biweekly/monthly) is respected.
+5. Set up the research runner (next section) — without it, scheduled runs and "Run now" can't start.
+6. Deploy. `vercel.json` schedules the cron daily at 09:00 UTC; each hit dispatches a run for every hypcheck whose `nextRunAt` has passed, so per-hypcheck cadence (daily/weekly/biweekly/monthly) is respected. Everything fits Vercel **Hobby** (no function needs more than 300 s).
+
+## Research runner
+
+A live research run takes ~200–300 s, with a 600 s abort backstop — more than Vercel Hobby's 300 s function ceiling. So the app never runs one in a Vercel function. `/api/cron` and **Run now** mark the attempt `queued` and dispatch the [`research.yml`](.github/workflows/research.yml) GitHub Actions workflow (`src/lib/dispatch.ts`); the workflow runs `scripts/research.ts`, which calls the same `executeRun` against the same Turso database. The UI's progress poll (`/api/health` → `lastAttempt`) shows queued → running → done.
+
+The schedule stays in `vercel.json` rather than an Actions `schedule:` on purpose: GitHub silently disables scheduled workflows after 60 days without a push, but never disables a dispatched one.
+
+Setup:
+- **GitHub → Settings → Secrets and variables → Actions**, repository secrets: `ANTHROPIC_API_KEY`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` (production values).
+- **Vercel → Settings → Environment Variables**, Production only: `HYPCHECK_DISPATCH_TOKEN` — a fine-grained personal access token, repository access *only* this repo, permission **Actions: Read and write**. Optional: `HYPCHECK_DISPATCH_REPO` (default `DeDuva/hypcheck`), `HYPCHECK_DISPATCH_REF` (default `main`).
+- Vercel keeps its own `ANTHROPIC_API_KEY` — "Refine with AI" on `/new` still runs there (it fits in 300 s).
+
+The workflow only runs from `main`. Run it by hand from **Actions → Research → Run workflow** (empty id = every due hypcheck), or locally with `npx tsx --env-file=.env.local scripts/research.ts --local`.
 
 ## Stack
 

@@ -47,12 +47,17 @@ previews are for build/UI review; staging is where auth flows get exercised.
      a change reaches prod. This means "Run now" and refine on staging spend
      real tokens; a separate key from prod's is fine if you want spend
      tracked apart.
-4. Vercel cron only fires on production, so staging accrues no *scheduled*
-   spend — but a manual "Run now" or hypothesis refine on staging does hit
-   the live engine and costs real tokens now that `ANTHROPIC_API_KEY` is
-   set. Test the cron path manually (still simulated unless you also trigger
-   it with the API key present):
-   `curl -H "Authorization: Bearer $CRON_SECRET" https://<staging-alias>/api/cron`
+4. **Research runs execute on GitHub Actions, against production only.**
+   "Run now" and `/api/cron` dispatch `research.yml` (README → *Research
+   runner*), whose secrets are the production ones and which runs only from
+   `main`. `HYPCHECK_DISPATCH_TOKEN` is set for Production only, so on
+   staging and previews "Run now" fails fast with "Research dispatch isn't
+   configured" rather than touching the production DB. To exercise the
+   engine against staging, run it locally with the staging env:
+   `npx tsx --env-file=.env.staging.local scripts/research.ts` (add
+   `HYPCHECK_ID=<id>` for one hypcheck). "Refine with AI" still runs on
+   Vercel and still works on staging.
+
 5. Preview deployments sit behind Vercel Deployment Protection by default
    (a Vercel login screen). Fine solo; disable it or share a bypass link if
    non-team testers need staging.

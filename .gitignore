@@ -31,3 +31,5 @@ npm-debug.log*
 .claude/settings.local.json
 .vercel
 .env*
+.claude/scratch/
+.claude/worktrees/

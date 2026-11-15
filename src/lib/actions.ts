@@ -2,8 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
-import { executeRun, refineHypothesis } from "./engine";
+import { refineHypothesis } from "./engine";
+import { dispatchResearch } from "./dispatch";
 import {
   addAllowedEmail,
   addVersion,
@@ -66,34 +66,32 @@ export async function createHypcheckAction(input: CreateHypcheckInput): Promise<
 }
 
 /**
- * Kick off a research run WITHOUT blocking the request on it. The long Claude
- * research call runs in `after()` — after the response is sent — so the click
- * returns immediately and can never hit the request timeout. The client polls
- * /api/health (lastAttempt) until the run lands. Research still gets the full
- * background function budget.
+ * Kick off a research run. The run itself happens on GitHub Actions
+ * (`research.yml`, see src/lib/dispatch.ts) because it outlasts Vercel Hobby's
+ * 300 s function ceiling; this action only marks the attempt queued and
+ * dispatches the workflow, so it returns in about a second. The client polls
+ * /api/health (lastAttempt) through queued → running → ok/error.
  */
 export async function runNowAction(hypcheckId: string): Promise<void> {
   const { viewer, hypcheck } = await requireHypcheckAccess(hypcheckId, "editor");
   const log = actionLogger("runNow", { userId: viewer.id, hypcheckId });
-
-  // Mark it running now so the UI (and its poll) has immediate state.
-  await setLastRunAttempt({
-    status: "running",
+  const attempt = {
     hypcheckId,
     hypcheckName: hypcheck.name,
     model: process.env.HYPCHECK_MODEL || FALLBACK_LATEST[hypcheck.model],
     startedAt: new Date().toISOString(),
-  });
-  log.info("runNow.scheduled", { hypcheckName: hypcheck.name });
+  };
 
-  after(async () => {
-    try {
-      await executeRun(hypcheck, log);
-    } catch (err) {
-      // executeRun already records an "error" attempt marker; this is a backstop.
-      log.error("runNow.background.fail", { err: serializeError(err) });
-    }
-  });
+  // Mark it queued first so the UI (and its poll) has immediate state.
+  await setLastRunAttempt({ status: "queued", ...attempt });
+  try {
+    await dispatchResearch(hypcheckId);
+  } catch (err) {
+    log.error("runNow.dispatch.fail", { err: serializeError(err) });
+    await setLastRunAttempt({ status: "error", ...attempt, finishedAt: new Date().toISOString(), error: serializeError(err) });
+    throw err;
+  }
+  log.info("runNow.dispatched", { hypcheckName: hypcheck.name });
 
   revalidatePath("/", "layout");
 }
